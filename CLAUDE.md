@@ -17,8 +17,6 @@ bun run src/index.ts …         # run the CLI without linking
 bun link                       # put `key` on PATH (~/.bun/bin/key)
 ```
 
-There is no lint setup. `bun.lock` is the source of truth (`pnpm-lock.yaml` is a leftover). The only runtime npm dependencies besides `@termuijs/*` are `qrcode` (real QR encoding for `key share` — the `QRCode` widget in @termuijs is decorative, not scannable).
-
 ## Architecture (Clean Architecture)
 
 Dependencies point strictly inward: `domain` ← `application` ← (`infrastructure`, `presentation`), with `src/composition.ts` as the only place that binds implementations to ports. `bunx tsc --noEmit` won't catch layer violations — respect them by convention:
