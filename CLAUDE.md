@@ -17,7 +17,7 @@ bun run src/index.ts …         # run the CLI without linking
 bun link                       # put `key` on PATH (~/.bun/bin/key)
 ```
 
-There is no lint setup. `bun.lock` is the source of truth (`pnpm-lock.yaml` is a leftover).
+There is no lint setup. `bun.lock` is the source of truth (`pnpm-lock.yaml` is a leftover). The only runtime npm dependencies besides `@termuijs/*` are `qrcode` (real QR encoding for `key share` — the `QRCode` widget in @termuijs is decorative, not scannable).
 
 ## Architecture (Clean Architecture)
 
@@ -34,6 +34,7 @@ Cross-cutting flows worth knowing before editing:
 - **Session**: after unlock, the *derived key* (never the password) is cached in `$XDG_RUNTIME_DIR/key/session` with a TTL renewed on each use. CLI (`presentation/cli/unlock.ts`) and TUI (`presentation/tui/run.ts`) both call `vaultAccess.openWithSession()` before prompting. `changePassword` rekeys and clears the session.
 - **Alias resolution** (`domain/secret.ts`): `resolveSecret` matches canonical names *and* aliases; `get`/`apply` go through it, while mutations validate via `ownerOfName` (an alias may not shadow any name/alias in its group). Mutation validation lives in the `manage-secrets` use case — don't duplicate it in presentation.
 - **`.env` patching** (`domain/env-file.ts`): line-preserving by design — comments, order, `export` prefix, CRLF, missing trailing newline all survive. Duplicated variables are all updated on purpose. Don't replace this with a generic dotenv library; round-trip fidelity is the point.
+- **Group sharing** (`application/use-cases/share-group.ts`): `key share`/`key import`. Payload format v1 is a wire contract — `"keyshare1:" + base64url(salt|iv|tag|ciphertext)`, gzip inside, scrypt params fixed by the format (don't couple them to infra defaults). The gzip bytes cross the string-based CryptoProvider API via latin1 (byte-faithful). The one-time code is normalized (case/dashes/spaces) before key derivation.
 
 ## Tests
 

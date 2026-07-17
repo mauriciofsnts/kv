@@ -5,6 +5,7 @@ import { vaultAccess } from './composition.ts'
 import { cmdApply } from './presentation/cli/apply.ts'
 import { cmdInit } from './presentation/cli/init.ts'
 import { cmdAlias, cmdGet, cmdList, cmdPasswd, cmdRm, cmdSet } from './presentation/cli/secrets.ts'
+import { cmdImport, cmdShare } from './presentation/cli/share.ts'
 import { cmdVault } from './presentation/cli/vaultcmd.ts'
 
 const HELP = `key — encrypted .env manager
@@ -20,6 +21,8 @@ Usage:
   key alias NAME            List a secret's aliases
   key alias add NAME A...   Add aliases (alternative names, same value)
   key alias rm NAME A...    Remove aliases
+  key share [GROUP]         Share a group as an encrypted QR code + one-time code
+  key import [PAYLOAD]      Import a shared group (asks for the one-time code)
   key lock                  End the session (ask for the password again)
   key passwd                Change the vault password
   key vault [location]      Show or change where the vault is stored:
@@ -86,6 +89,12 @@ async function main(): Promise<void> {
       break
     case 'vault':
       await cmdVault(arg)
+      break
+    case 'share':
+      await cmdShare(arg, values.group)
+      break
+    case 'import':
+      await cmdImport(arg, values.group)
       break
     case 'lock':
       vaultAccess.lock()

@@ -4,6 +4,7 @@
 import { makeApplyEnv } from './application/use-cases/apply-env.ts'
 import { makeManageSecrets } from './application/use-cases/manage-secrets.ts'
 import { makeRelocateVault } from './application/use-cases/relocate-vault.ts'
+import { makeShareGroup } from './application/use-cases/share-group.ts'
 import { makeVaultAccess } from './application/use-cases/vault-access.ts'
 import { jsonConfigStore } from './infrastructure/config/json-config-store.ts'
 import { nodeCrypto } from './infrastructure/crypto/node-crypto.ts'
@@ -25,3 +26,5 @@ export const manageSecrets = makeManageSecrets(vaultAccess)
 export const applyEnv = makeApplyEnv(fsEnvFiles)
 
 export const relocateVault = makeRelocateVault(jsonConfigStore, repositoryFor)
+
+export const shareGroup = makeShareGroup(nodeCrypto, vaultAccess)

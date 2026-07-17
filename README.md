@@ -34,6 +34,8 @@ key passwd                      # change the password (re-encrypts the vault)
 key vault                       # show where the vault is stored
 key vault sqlite://~/.local/share/key/vault.db      # move the vault to SQLite
 key vault postgres://user:pass@host:5432/db         # ...or to Postgres
+key share backend               # share a group: encrypted QR + one-time code
+key import                      # paste a shared payload and type the code
 ```
 
 ### Aliases
@@ -63,6 +65,26 @@ key vault postgres://user:pass@host:5432/mydb    # Postgres (also mysql:// / mar
 - When switching, `key vault` offers to **copy the existing vault** to the new location — no password needed, since only ciphertext moves.
 - The database only ever stores the **encrypted envelope** (a single row in a `key_vault` table); encryption/decryption always happens locally, and the previous version is kept in a `previous` column (the file backend keeps a `.bak`).
 - Database drivers are Bun built-ins (`Bun.SQL`) — no extra dependencies.
+
+### Sharing a group (QR code)
+
+`key share GROUP` packages the group's secrets (values, notes, aliases), gzips and **encrypts them with a random one-time code**, then prints the payload as a terminal QR code plus the code:
+
+```
+$ key share backend
+Sharing group "backend" — 2 secrets: API_KEY, DATABASE_URL
+
+  █▀▀▀▀▀█ ▀▄█▀ ... (scannable QR)
+
+Payload (same content as the QR): keyshare1:fK5KFb9jQhUX...
+One-time code:  9XDC-AAB5-9V4B-2SNG
+```
+
+On the other machine, `key import` (paste the payload — scanned from the QR or copied as text — then type the code) decrypts it and merges the secrets into the receiver's own vault, reporting what was added/replaced and skipping names that collide with existing aliases. `--group` overrides the target group.
+
+- The QR/payload alone is useless: it's AES-256-GCM ciphertext keyed from the one-time code (scrypt). Send the code through a **different channel** (say it out loud, different messenger).
+- The code is forgiving: case, dashes and spaces don't matter.
+- Big groups can exceed what a terminal QR can hold (~1200 chars); `key share` then prints the payload text only.
 
 ### Groups
 
