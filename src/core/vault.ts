@@ -1,5 +1,3 @@
-import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
-import { dirname } from 'node:path'
 import {
   type EncryptedEnvelope,
   type KdfParams,
@@ -9,7 +7,10 @@ import {
   encrypt,
   newSalt,
 } from './crypto.ts'
-import { vaultPath } from './paths.ts'
+import { vaultLocation } from './paths.ts'
+import { VaultExistsError, type VaultStorage, storageFor } from './storage.ts'
+
+export { VaultExistsError, VaultNotFoundError } from './storage.ts'
 
 export interface Secret {
   value: string
@@ -28,84 +29,80 @@ export const DEFAULT_GROUP = 'default'
 
 export const NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/
 
-export class VaultNotFoundError extends Error {
-  constructor(path: string) {
-    super(`Vault not found at ${path}. Run \`key init\` to create one.`)
-    this.name = 'VaultNotFoundError'
-  }
-}
-
-export class VaultExistsError extends Error {
-  constructor(path: string) {
-    super(`A vault already exists at ${path}.`)
-    this.name = 'VaultExistsError'
-  }
-}
-
 export interface Vault {
   data: VaultData
   key: Buffer
   kdf: KdfParams
-  path: string
+  storage: VaultStorage
 }
 
-export function vaultExists(path = vaultPath()): boolean {
-  return existsSync(path)
+// Accepts a VaultStorage, a location string (path or database URL), or
+// nothing (resolved location: env > config > default file).
+function resolveStorage(target?: VaultStorage | string): VaultStorage {
+  if (target === undefined) return storageFor(vaultLocation())
+  return typeof target === 'string' ? storageFor(target) : target
 }
 
-export function readEnvelope(path = vaultPath()): EncryptedEnvelope {
-  if (!existsSync(path)) throw new VaultNotFoundError(path)
-  return JSON.parse(readFileSync(path, 'utf8')) as EncryptedEnvelope
+export async function vaultExists(target?: VaultStorage | string): Promise<boolean> {
+  return resolveStorage(target).exists()
 }
 
-export function createVault(password: string, path = vaultPath()): Vault {
-  if (existsSync(path)) throw new VaultExistsError(path)
+export async function readEnvelope(target?: VaultStorage | string): Promise<EncryptedEnvelope> {
+  return resolveStorage(target).read()
+}
+
+export async function createVault(
+  password: string,
+  target?: VaultStorage | string,
+): Promise<Vault> {
+  const storage = resolveStorage(target)
+  if (await storage.exists()) throw new VaultExistsError(storage.location)
   const salt = newSalt()
   const kdf: KdfParams = { algo: 'scrypt', salt: salt.toString('base64'), ...SCRYPT_PARAMS }
   const vault: Vault = {
     data: { groups: { [DEFAULT_GROUP]: {} } },
     key: deriveKey(password, salt),
     kdf,
-    path,
+    storage,
   }
-  saveVault(vault)
+  await saveVault(vault)
   return vault
 }
 
-export function openVaultWithPassword(password: string, path = vaultPath()): Vault {
-  const envelope = readEnvelope(path)
+export async function openVaultWithPassword(
+  password: string,
+  target?: VaultStorage | string,
+): Promise<Vault> {
+  const storage = resolveStorage(target)
+  const envelope = await storage.read()
   const key = deriveKey(password, Buffer.from(envelope.kdf.salt, 'base64'), envelope.kdf)
-  return openVaultWithKey(key, path, envelope)
+  return openVaultWithKey(key, storage, envelope)
 }
 
-export function openVaultWithKey(
+export async function openVaultWithKey(
   key: Buffer,
-  path = vaultPath(),
-  envelope = readEnvelope(path),
-): Vault {
-  const data = JSON.parse(decrypt(envelope, key)) as VaultData
-  return { data, key, kdf: envelope.kdf, path }
+  target?: VaultStorage | string,
+  envelope?: EncryptedEnvelope,
+): Promise<Vault> {
+  const storage = resolveStorage(target)
+  const resolvedEnvelope = envelope ?? (await storage.read())
+  const data = JSON.parse(decrypt(resolvedEnvelope, key)) as VaultData
+  return { data, key, kdf: resolvedEnvelope.kdf, storage }
 }
 
-// Atomic write: .tmp + rename, keeping the previous version as .bak.
-export function saveVault(vault: Vault): void {
+export async function saveVault(vault: Vault): Promise<void> {
   const envelope = encrypt(JSON.stringify(vault.data), vault.key, vault.kdf)
-  const serialized = JSON.stringify(envelope, null, 2) + '\n'
-  mkdirSync(dirname(vault.path), { recursive: true, mode: 0o700 })
-  if (existsSync(vault.path)) copyFileSync(vault.path, vault.path + '.bak')
-  const tmp = vault.path + '.tmp'
-  writeFileSync(tmp, serialized, { mode: 0o600 })
-  renameSync(tmp, vault.path)
+  await vault.storage.write(envelope)
 }
 
-export function rekeyVault(vault: Vault, newPassword: string): Vault {
+export async function rekeyVault(vault: Vault, newPassword: string): Promise<Vault> {
   const salt = newSalt()
   const rekeyed: Vault = {
     ...vault,
     key: deriveKey(newPassword, salt),
     kdf: { algo: 'scrypt', salt: salt.toString('base64'), ...SCRYPT_PARAMS },
   }
-  saveVault(rekeyed)
+  await saveVault(rekeyed)
   return rekeyed
 }
 

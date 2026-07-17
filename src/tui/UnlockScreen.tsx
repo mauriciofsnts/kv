@@ -23,11 +23,11 @@ export function UnlockScreen() {
   const attemptsRef = useRef(0)
   attemptsRef.current = attempts
 
-  const tryUnlock = () => {
+  const tryUnlock = async () => {
     const current = passwordRef.current
     if (current === '') return
     try {
-      const vault = openVaultWithPassword(current)
+      const vault = await openVaultWithPassword(current)
       storeSessionKey(vault.key)
       setVault(vault)
     } catch (err) {
@@ -38,7 +38,7 @@ export function UnlockScreen() {
         setPassword('')
         setError(`Wrong password (${attempt}/${MAX_ATTEMPTS}).`)
       } else {
-        throw err
+        setError(err instanceof Error ? err.message : String(err))
       }
     }
   }
@@ -46,7 +46,7 @@ export function UnlockScreen() {
   useInput((key: string, event: KeyEvent) => {
     if (event.ctrl && key === 'c') process.exit(0)
     if (key === 'enter' || key === 'return') {
-      tryUnlock()
+      void tryUnlock()
       return
     }
     setPassword((current: string) => {

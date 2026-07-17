@@ -1,10 +1,43 @@
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 
-export function vaultPath(): string {
+function configHome(): string {
+  return process.env.XDG_CONFIG_HOME ?? join(homedir(), '.config')
+}
+
+export function configPath(): string {
+  return join(configHome(), 'key', 'config.json')
+}
+
+interface KeyConfig {
+  vault?: string
+}
+
+export function readConfig(): KeyConfig {
+  const path = configPath()
+  if (!existsSync(path)) return {}
+  try {
+    return JSON.parse(readFileSync(path, 'utf8')) as KeyConfig
+  } catch {
+    return {}
+  }
+}
+
+export function writeConfig(config: KeyConfig): void {
+  const path = configPath()
+  mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
+  writeFileSync(path, JSON.stringify(config, null, 2) + '\n', { mode: 0o600 })
+}
+
+// Where the vault lives: a plain file path or a database URL
+// (sqlite://, postgres://, mysql://, mariadb://).
+// Resolution: KEY_VAULT_PATH env > config.json "vault" > default file.
+export function vaultLocation(): string {
   if (process.env.KEY_VAULT_PATH) return process.env.KEY_VAULT_PATH
-  const configHome = process.env.XDG_CONFIG_HOME ?? join(homedir(), '.config')
-  return join(configHome, 'key', 'vault.enc')
+  const configured = readConfig().vault
+  if (configured) return configured
+  return join(configHome(), 'key', 'vault.enc')
 }
 
 // Returns the session cache path and whether it lives in tmpfs (XDG_RUNTIME_DIR).

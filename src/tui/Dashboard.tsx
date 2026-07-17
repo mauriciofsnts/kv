@@ -237,7 +237,9 @@ function ConfirmDelete({ width, names }: { width: number; names: string[] }) {
         const target = names[s.selected]
         if (s.vault && target) {
           removeSecret(s.vault, s.group, target)
-          saveVault(s.vault)
+          saveVault(s.vault).catch((err: unknown) =>
+            s.setStatus(`✗ save failed: ${err instanceof Error ? err.message : String(err)}`),
+          )
           s.setStatus(`✓ ${target} removed`)
           s.setSelected(Math.max(0, s.selected - 1))
         }
@@ -266,7 +268,9 @@ function NewGroupInput({ width }: { width: number }) {
       const trimmed = nameRef.current.trim()
       if (s.vault && trimmed) {
         s.vault.data.groups[trimmed] ??= {}
-        saveVault(s.vault)
+        saveVault(s.vault).catch((err: unknown) =>
+          s.setStatus(`✗ save failed: ${err instanceof Error ? err.message : String(err)}`),
+        )
         s.setGroup(trimmed)
         s.setStatus(`✓ group "${trimmed}" created`)
       }
