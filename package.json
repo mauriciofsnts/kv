@@ -1,0 +1,30 @@
+{
+  "name": "key",
+  "version": "0.1.0",
+  "description": "Encrypted .env manager with a TUI — sops-style password vault with `key apply`",
+  "type": "module",
+  "bin": {
+    "key": "./src/index.ts"
+  },
+  "scripts": {
+    "dev": "bun run src/index.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "bun": ">=1.3.0"
+  },
+  "dependencies": {
+    "@termuijs/core": "^0.1.7",
+    "@termuijs/jsx": "^0.1.7",
+    "@termuijs/store": "^0.1.7",
+    "@termuijs/tss": "^0.1.7",
+    "@termuijs/ui": "^0.1.7",
+    "@termuijs/widgets": "^0.1.7"
+  },
+  "devDependencies": {
+    "@termuijs/testing": "^0.1.7",
+    "bun-types": "^1.3.14",
+    "typescript": "^7.0.2"
+  }
+}
