@@ -6,7 +6,8 @@
 import type { KeyEvent } from '@termuijs/core'
 import { useInput, useKeymap, useRef, useState } from '@termuijs/jsx'
 import { manageSecrets } from '../../composition.ts'
-import { type Secret, listGroups, listSecrets } from '../../domain/secret.ts'
+import { type Secret, getSecret, listGroups, listSecrets } from '../../domain/secret.ts'
+import { CLIPBOARD_CLEAR_SECONDS, copyToClipboard } from '../clipboard.ts'
 import { SecretForm } from './SecretForm.tsx'
 import { useTuiStore } from './store.ts'
 import { useTermSize } from './useTermSize.ts'
@@ -193,6 +194,20 @@ function BrowseKeymap({ count, names }: { count: number; names: string[] }) {
         if (name) s.toggleReveal(name)
       },
     },
+    {
+      key: 'c',
+      action: () => {
+        const s = useTuiStore.getState()
+        const name = names[s.selected]
+        const secret = s.vault && name ? getSecret(s.vault.data, s.group, name) : undefined
+        if (!name || !secret) return
+        copyToClipboard(secret.value)
+          .then(() => s.setStatus(`✓ ${name} copied (clears in ${CLIPBOARD_CLEAR_SECONDS}s)`))
+          .catch((err: unknown) =>
+            s.setStatus(`✗ ${err instanceof Error ? err.message : String(err)}`),
+          )
+      },
+    },
     { key: '/', action: () => setMode('filter') },
     { key: 'g', action: () => setMode('new-group') },
     { key: 'escape', action: () => useTuiStore.getState().setFilter('') },
@@ -290,7 +305,7 @@ function Footer({ width }: { width?: number }) {
     <box flexDirection="column" height={2} width={width}>
       <text height={1} width={width} color="green">{status || ' '}</text>
       <text height={1} width={width} dim>
-        ↑↓ move · ←→ group · a add · e edit · d delete · v reveal · / search · g new group · q quit
+        ↑↓ move · ←→ group · a add · e edit · d delete · v reveal · c copy · / search · g new group · q quit
       </text>
     </box>
   )

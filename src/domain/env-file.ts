@@ -21,6 +21,37 @@ export function listEnvVars(content: string): EnvVarEntry[] {
   return entries
 }
 
+export interface EnvEntry {
+  name: string
+  value: string
+}
+
+// Parses names AND values (what `key scan`/`key diff` consume). Follows
+// consumer semantics: when a variable repeats, the last occurrence wins.
+// Quoting: "..." unescapes \" \\ \n; '...' is literal; unquoted values are
+// trimmed and lose trailing ` # comments`.
+export function parseEnvEntries(content: string): EnvEntry[] {
+  const byName = new Map<string, string>()
+  for (const line of splitLines(content)) {
+    const match = line.text.match(VAR_LINE)
+    if (match) byName.set(match[2]!, unquoteValue(match[4]!))
+  }
+  return [...byName.entries()].map(([name, value]) => ({ name, value }))
+}
+
+function unquoteValue(raw: string): string {
+  const trimmed = raw.trim()
+  // Quoted values may be followed by a comment: A="v" # note
+  const doubleQuoted = trimmed.match(/^"((?:[^"\\]|\\.)*)"/)
+  if (doubleQuoted) {
+    return doubleQuoted[1]!.replace(/\\(["\\n])/g, (_, c: string) => (c === 'n' ? '\n' : c))
+  }
+  const singleQuoted = trimmed.match(/^'([^']*)'/)
+  if (singleQuoted) return singleQuoted[1]!
+  const commentAt = trimmed.search(/\s#/)
+  return (commentAt >= 0 ? trimmed.slice(0, commentAt) : trimmed).trim()
+}
+
 export interface SetValueResult {
   content: string
   found: boolean
