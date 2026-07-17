@@ -1,5 +1,5 @@
-// Prompts de linha de comando sem dependência do TermUI: o CLI precisa
-// funcionar em pipes e scripts, onde subir um app TUI não faz sentido.
+// Command-line prompts with no TermUI dependency: the CLI must work in
+// pipes and scripts, where spinning up a TUI app makes no sense.
 
 export async function hiddenPrompt(label: string): Promise<string> {
   process.stderr.write(label)
@@ -17,7 +17,7 @@ export async function hiddenPrompt(label: string): Promise<string> {
       for (const byte of chunk) {
         if (byte === 0x03) {
           cleanup()
-          reject(new Error('cancelado'))
+          reject(new Error('canceled'))
           return
         }
         if (byte === 0x0d || byte === 0x0a) {
@@ -27,7 +27,7 @@ export async function hiddenPrompt(label: string): Promise<string> {
           return
         }
         if (byte === 0x7f || byte === 0x08) {
-          // Remove o último codepoint UTF-8 inteiro (continuações 0b10xxxxxx).
+          // Drop the last full UTF-8 codepoint (continuation bytes 0b10xxxxxx).
           while (bytes.length > 0 && (bytes[bytes.length - 1]! & 0xc0) === 0x80) bytes.pop()
           bytes.pop()
           continue
@@ -45,9 +45,9 @@ export async function hiddenPrompt(label: string): Promise<string> {
 }
 
 export async function confirmPrompt(label: string): Promise<boolean> {
-  process.stderr.write(`${label} [s/N] `)
+  process.stderr.write(`${label} [y/N] `)
   const answer = (await readLine()).trim().toLowerCase()
-  return answer === 's' || answer === 'sim' || answer === 'y' || answer === 'yes'
+  return answer === 'y' || answer === 'yes'
 }
 
 async function readLine(): Promise<string> {

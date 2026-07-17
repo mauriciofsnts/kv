@@ -1,5 +1,5 @@
-// Parser/patcher de .env que preserva o arquivo byte a byte fora dos valores
-// alterados: comentários, linhas em branco, ordem, prefixo `export`, CRLF.
+// .env parser/patcher that preserves the file byte-for-byte outside the
+// values it changes: comments, blank lines, order, `export` prefix, CRLF.
 
 const VAR_LINE = /^(\s*(?:export\s+)?)([A-Za-z_][A-Za-z0-9_]*)(\s*=\s*)(.*)$/
 
@@ -26,10 +26,10 @@ export interface SetValueResult {
   found: boolean
 }
 
-// Substitui o valor de `name` preservando o resto da linha. Quando a variável
-// aparece mais de uma vez, todas as ocorrências são atualizadas (a última é a
-// que vale para quem consome o .env, mas deixar as anteriores com o valor
-// antigo vazaria um placeholder desatualizado).
+// Replaces the value of `name` keeping the rest of the line intact. When the
+// variable appears more than once, every occurrence is updated (the last one
+// wins for whoever consumes the .env, but leaving earlier ones with the old
+// value would leak a stale placeholder).
 export function setEnvValue(content: string, name: string, value: string): SetValueResult {
   const lines = splitLines(content)
   let found = false
@@ -49,8 +49,8 @@ export function appendEnvVar(content: string, name: string, value: string): stri
   return `${content}${needsNewline ? eol : ''}${name}=${quoteValue(value)}${eol}`
 }
 
-// Aspas duplas apenas quando o valor precisa: espaços, #, aspas, quebras de
-// linha ou espaços nas pontas. Valores simples ficam sem aspas, como se escreve à mão.
+// Double quotes only when the value needs them: spaces, #, quotes, newlines
+// or leading/trailing whitespace. Simple values stay bare, like hand-written.
 export function quoteValue(value: string): string {
   if (value === '') return '""'
   const needsQuotes = /[\s#"'\\$`]/.test(value) || value !== value.trim()

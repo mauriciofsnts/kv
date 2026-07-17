@@ -29,7 +29,7 @@ export interface EncryptedEnvelope {
 
 export class WrongPasswordError extends Error {
   constructor() {
-    super('Senha incorreta ou cofre corrompido (falha na autenticação)')
+    super('Wrong password or corrupted vault (authentication failed)')
     this.name = 'WrongPasswordError'
   }
 }

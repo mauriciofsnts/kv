@@ -1,5 +1,5 @@
-// useTerminalSize do @termuijs/jsx 0.1.7 devolve 0x0; este hook lê o
-// tamanho real do TTY e acompanha resizes.
+// useTerminalSize from @termuijs/jsx 0.1.7 returns 0x0; this hook reads the
+// real TTY size and tracks resizes.
 import { useEffect, useState } from '@termuijs/jsx'
 
 export function useTermSize(): { cols: number; rows: number } {

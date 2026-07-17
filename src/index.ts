@@ -2,32 +2,36 @@
 import { parseArgs } from 'node:util'
 import { cmdApply } from './cli/apply.ts'
 import { cmdInit } from './cli/init.ts'
-import { cmdGet, cmdList, cmdPasswd, cmdRm, cmdSet } from './cli/secrets.ts'
+import { cmdAlias, cmdGet, cmdList, cmdPasswd, cmdRm, cmdSet } from './cli/secrets.ts'
 import { WrongPasswordError } from './core/crypto.ts'
 import { clearSession } from './core/session.ts'
 import { VaultExistsError, VaultNotFoundError } from './core/vault.ts'
 
-const HELP = `key — gerenciador de envs criptografadas
+const HELP = `key — encrypted .env manager
 
-Uso:
-  key                       Abre o TUI
-  key init                  Cria o cofre
-  key apply <VAR|all>       Preenche valores no ./.env
-  key set NOME              Grava uma secret (valor via prompt oculto)
-  key get NOME              Imprime o valor de uma secret
-  key list                  Lista grupos e nomes (nunca valores)
-  key rm NOME               Remove uma secret
-  key lock                  Encerra a sessão (volta a pedir senha)
-  key passwd                Troca a senha do cofre
+Usage:
+  key                       Open the TUI
+  key init                  Create the vault
+  key apply <VAR|all>       Fill values into ./.env
+  key set NAME              Store a secret (value via hidden prompt)
+  key get NAME              Print a secret's value
+  key list                  List groups and names (never values)
+  key rm NAME               Remove a secret
+  key alias NAME            List a secret's aliases
+  key alias add NAME A...   Add aliases (alternative names, same value)
+  key alias rm NAME A...    Remove aliases
+  key lock                  End the session (ask for the password again)
+  key passwd                Change the vault password
 
-Opções:
-  --group, -g <grupo>       Grupo do cofre (padrão: arquivo .key do diretório, senão "default")
-  --env, -e <arquivo>       Arquivo alvo do apply (padrão: ./.env)
-  --help, -h                Mostra esta ajuda
+Options:
+  --group, -g <group>       Vault group (default: .key file in the directory, else "default")
+  --env, -e <file>          Target file for apply (default: ./.env)
+  --help, -h                Show this help
 
-Variáveis de ambiente:
-  KEY_VAULT_PATH            Caminho do cofre (padrão: ~/.config/key/vault.enc)
-  KEY_SESSION_TTL           TTL da sessão em segundos (padrão: 900)
+Environment variables:
+  KEY_VAULT_PATH            Vault path (default: ~/.config/key/vault.enc)
+  KEY_SESSION_TTL           Session TTL in seconds (default: 900)
+  KEY_MIN_PASSWORD_LENGTH   Minimum vault password length (default: 8)
 `
 
 async function main(): Promise<void> {
@@ -72,9 +76,12 @@ async function main(): Promise<void> {
     case 'rm':
       await cmdRm(arg, values.group)
       break
+    case 'alias':
+      await cmdAlias(positionals.slice(1), values.group)
+      break
     case 'lock':
       clearSession()
-      console.log('Sessão encerrada.')
+      console.log('Session ended.')
       break
     case 'passwd':
       await cmdPasswd()
@@ -83,7 +90,7 @@ async function main(): Promise<void> {
       console.log(HELP)
       break
     default:
-      console.error(`Comando desconhecido: ${command}\n`)
+      console.error(`Unknown command: ${command}\n`)
       console.error(HELP)
       process.exit(1)
   }
@@ -96,8 +103,8 @@ main().catch((err) => {
     err instanceof VaultExistsError
   ) {
     console.error(err.message)
-  } else if (err instanceof Error && err.message === 'cancelado') {
-    console.error('Cancelado.')
+  } else if (err instanceof Error && err.message === 'canceled') {
+    console.error('Canceled.')
   } else {
     console.error(err)
   }

@@ -15,7 +15,7 @@ interface SessionFile {
   expiresAt: number
 }
 
-// Grava a chave derivada (nunca a senha) com validade. Renovada a cada uso.
+// Stores the derived key (never the password) with an expiry. Renewed on use.
 export function storeSessionKey(key: Buffer): { volatile: boolean } {
   const { path, volatile } = sessionPath()
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 })

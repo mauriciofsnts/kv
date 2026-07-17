@@ -7,7 +7,7 @@ import { useTuiStore } from './store.ts'
 export function App() {
   const vault = useTuiStore((s) => s.vault)
   return (
-    <ErrorBoundary fallback={(err: Error) => <text color="red">Erro: {err.message}</text>}>
+    <ErrorBoundary fallback={(err: Error) => <text color="red">Error: {err.message}</text>}>
       {vault ? <Dashboard /> : <UnlockScreen />}
     </ErrorBoundary>
   )

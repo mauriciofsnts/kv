@@ -15,6 +15,9 @@ export interface Secret {
   value: string
   updatedAt: string
   note?: string
+  // Alternative env var names that resolve to this secret's value
+  // (e.g. DB_URL and POSTGRES_URL sharing the same connection string).
+  aliases?: string[]
 }
 
 export interface VaultData {
@@ -23,16 +26,18 @@ export interface VaultData {
 
 export const DEFAULT_GROUP = 'default'
 
+export const NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/
+
 export class VaultNotFoundError extends Error {
   constructor(path: string) {
-    super(`Cofre não encontrado em ${path}. Rode \`key init\` para criar um.`)
+    super(`Vault not found at ${path}. Run \`key init\` to create one.`)
     this.name = 'VaultNotFoundError'
   }
 }
 
 export class VaultExistsError extends Error {
   constructor(path: string) {
-    super(`Já existe um cofre em ${path}.`)
+    super(`A vault already exists at ${path}.`)
     this.name = 'VaultExistsError'
   }
 }
@@ -82,7 +87,7 @@ export function openVaultWithKey(
   return { data, key, kdf: envelope.kdf, path }
 }
 
-// Escrita atômica: .tmp + rename, preservando a versão anterior em .bak.
+// Atomic write: .tmp + rename, keeping the previous version as .bak.
 export function saveVault(vault: Vault): void {
   const envelope = encrypt(JSON.stringify(vault.data), vault.key, vault.kdf)
   const serialized = JSON.stringify(envelope, null, 2) + '\n'
@@ -110,17 +115,91 @@ export function setSecret(
   name: string,
   value: string,
   note?: string,
+  aliases?: string[],
 ): void {
   vault.data.groups[group] ??= {}
+  const previous = vault.data.groups[group][name]
   vault.data.groups[group][name] = {
     value,
     updatedAt: new Date().toISOString(),
     ...(note ? { note } : {}),
+    ...(aliases !== undefined
+      ? aliases.length > 0
+        ? { aliases }
+        : {}
+      : previous?.aliases?.length
+        ? { aliases: previous.aliases }
+        : {}),
   }
 }
 
 export function getSecret(vault: Vault, group: string, name: string): Secret | undefined {
   return vault.data.groups[group]?.[name]
+}
+
+// Resolves a name to a secret, matching either the canonical name or any of
+// its aliases. Returns the canonical name alongside the secret.
+export function resolveSecret(
+  vault: Vault,
+  group: string,
+  name: string,
+): { name: string; secret: Secret } | undefined {
+  const groupSecrets = vault.data.groups[group]
+  if (!groupSecrets) return undefined
+  const direct = groupSecrets[name]
+  if (direct) return { name, secret: direct }
+  for (const [canonical, secret] of Object.entries(groupSecrets)) {
+    if (secret.aliases?.includes(name)) return { name: canonical, secret }
+  }
+  return undefined
+}
+
+// Canonical name that owns `name` in the group, either directly or as an
+// alias — used to detect collisions before adding names/aliases.
+export function ownerOfName(vault: Vault, group: string, name: string): string | undefined {
+  return resolveSecret(vault, group, name)?.name
+}
+
+export function addAliases(
+  vault: Vault,
+  group: string,
+  name: string,
+  aliases: string[],
+): { added: string[]; conflicts: { alias: string; owner: string }[] } {
+  const secret = getSecret(vault, group, name)
+  if (!secret) throw new Error(`"${name}" does not exist in group "${group}".`)
+  const added: string[] = []
+  const conflicts: { alias: string; owner: string }[] = []
+  for (const alias of aliases) {
+    const owner = ownerOfName(vault, group, alias)
+    if (owner === name) continue
+    if (owner) {
+      conflicts.push({ alias, owner })
+      continue
+    }
+    secret.aliases = [...(secret.aliases ?? []), alias]
+    added.push(alias)
+  }
+  if (added.length > 0) secret.updatedAt = new Date().toISOString()
+  return { added, conflicts }
+}
+
+export function removeAliases(
+  vault: Vault,
+  group: string,
+  name: string,
+  aliases: string[],
+): string[] {
+  const secret = getSecret(vault, group, name)
+  if (!secret) throw new Error(`"${name}" does not exist in group "${group}".`)
+  const removed = (secret.aliases ?? []).filter((a) => aliases.includes(a))
+  if (removed.length > 0) {
+    const remaining = (secret.aliases ?? []).filter((a) => !aliases.includes(a))
+    if (remaining.length > 0) secret.aliases = remaining
+    else delete secret.aliases
+    secret.updatedAt = new Date().toISOString()
+  }
+  return removed
 }
 
 export function removeSecret(vault: Vault, group: string, name: string): boolean {

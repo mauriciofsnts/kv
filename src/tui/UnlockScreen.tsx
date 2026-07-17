@@ -16,8 +16,8 @@ export function UnlockScreen() {
   const [attempts, setAttempts] = useState(0)
   const setVault = useTuiStore((s) => s.setVault)
 
-  // O handler do useInput pode ficar com closure de um render antigo; o ref
-  // garante leitura do valor atual na hora do Enter.
+  // The useInput handler may hold a closure from an old render; the refs
+  // guarantee we read the current values when Enter is pressed.
   const passwordRef = useRef('')
   passwordRef.current = password
   const attemptsRef = useRef(0)
@@ -36,7 +36,7 @@ export function UnlockScreen() {
         if (attempt >= MAX_ATTEMPTS) process.exit(1)
         setAttempts(attempt)
         setPassword('')
-        setError(`Senha incorreta (${attempt}/${MAX_ATTEMPTS}).`)
+        setError(`Wrong password (${attempt}/${MAX_ATTEMPTS}).`)
       } else {
         throw err
       }
@@ -60,10 +60,10 @@ export function UnlockScreen() {
   return (
     <box flexDirection="row" height={9}>
       <box flexDirection="column" padding={1} border="round" borderColor="cyan" gap={1} width={BOX_WIDTH} height={9}>
-        <text height={1} width={innerWidth} bold color="cyan">🔐 key — cofre bloqueado</text>
-        <Field label="Senha:" labelWidth={7} value={password} width={innerWidth} isFocused={true} mask />
+        <text height={1} width={innerWidth} bold color="cyan">🔐 key — vault locked</text>
+        <Field label="Passwd:" labelWidth={8} value={password} width={innerWidth} isFocused={true} mask />
         <text height={1} width={innerWidth} color="red">{error || ' '}</text>
-        <text height={1} width={innerWidth} dim>Enter desbloqueia · Ctrl+C sai</text>
+        <text height={1} width={innerWidth} dim>Enter unlocks · Ctrl+C quits</text>
       </box>
     </box>
   )
