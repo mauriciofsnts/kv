@@ -2,137 +2,229 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { WrongPasswordError } from '../src/core/crypto.ts'
+import type { ConfigStore, SessionCache } from '../src/application/ports.ts'
+import { makeManageSecrets } from '../src/application/use-cases/manage-secrets.ts'
+import { makeVaultAccess } from '../src/application/use-cases/vault-access.ts'
+import { VaultExistsError, VaultNotFoundError, WrongPasswordError } from '../src/domain/errors.ts'
 import {
   DEFAULT_GROUP,
-  VaultExistsError,
-  VaultNotFoundError,
   addAliases,
-  createVault,
   getSecret,
   listGroups,
   listSecrets,
-  openVaultWithKey,
-  openVaultWithPassword,
   ownerOfName,
-  rekeyVault,
   removeAliases,
   removeGroup,
   removeSecret,
   resolveSecret,
-  saveVault,
   setSecret,
-} from '../src/core/vault.ts'
+} from '../src/domain/secret.ts'
+import { nodeCrypto } from '../src/infrastructure/crypto/node-crypto.ts'
+import { repositoryFor } from '../src/infrastructure/storage/repository-factory.ts'
 
 let dir: string
 let path: string
 
-beforeEach(async () => {
+// Use cases wired with real crypto + file storage, but in-memory session
+// and a fixed config — the clean-arch seams make the fakes trivial.
+function makeTestbed(location: () => string) {
+  let sessionKey: Buffer | null = null
+  const sessions: SessionCache = {
+    store(key) {
+      sessionKey = key
+      return { volatile: true }
+    },
+    load: () => sessionKey,
+    clear() {
+      sessionKey = null
+    },
+  }
+  const config: ConfigStore = {
+    vaultLocation: location,
+    setVaultLocation() {},
+    locationOverridden: () => false,
+    minPasswordLength: () => 8,
+  }
+  const access = makeVaultAccess({ crypto: nodeCrypto, sessions, config, repositoryFor })
+  return { access, secrets: makeManageSecrets(access) }
+}
+
+let testbed: ReturnType<typeof makeTestbed>
+
+beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'key-vault-'))
   path = join(dir, 'vault.enc')
+  testbed = makeTestbed(() => path)
 })
 
-afterEach(async () => {
+afterEach(() => {
   rmSync(dir, { recursive: true, force: true })
 })
 
-describe('vault', async () => {
+describe('vault access', () => {
   test('create + reopen with password', async () => {
-    const vault = await createVault('password', path)
-    setSecret(vault, DEFAULT_GROUP, 'POSTGRES_DB', 'mydb')
-    await saveVault(vault)
+    const { access } = testbed
+    const vault = await access.initVault('password-123')
+    setSecret(vault.data, DEFAULT_GROUP, 'POSTGRES_DB', 'mydb')
+    await access.saveVault(vault)
 
-    const reopened = await openVaultWithPassword('password', path)
-    expect(getSecret(reopened, DEFAULT_GROUP, 'POSTGRES_DB')?.value).toBe('mydb')
+    const reopened = await access.openWithPassword('password-123')
+    expect(getSecret(reopened.data, DEFAULT_GROUP, 'POSTGRES_DB')?.value).toBe('mydb')
   })
 
   test('wrong password throws WrongPasswordError', async () => {
-    await createVault('password', path)
-    await expect(openVaultWithPassword('wrong', path)).rejects.toThrow(WrongPasswordError)
+    const { access } = testbed
+    await access.initVault('password-123')
+    await expect(access.openWithPassword('wrong-password')).rejects.toThrow(WrongPasswordError)
   })
 
-  test('open with derived key (session)', async () => {
-    const vault = await createVault('password', path)
-    setSecret(vault, DEFAULT_GROUP, 'X', '1')
-    await saveVault(vault)
-    const reopened = await openVaultWithKey(vault.key, path)
-    expect(getSecret(reopened, DEFAULT_GROUP, 'X')?.value).toBe('1')
+  test('init starts a session and openWithSession uses it', async () => {
+    const { access } = testbed
+    const vault = await access.initVault('password-123')
+    setSecret(vault.data, DEFAULT_GROUP, 'X', '1')
+    await access.saveVault(vault)
+
+    const reopened = await access.openWithSession()
+    expect(reopened).not.toBeNull()
+    expect(getSecret(reopened!.data, DEFAULT_GROUP, 'X')?.value).toBe('1')
+  })
+
+  test('lock ends the session', async () => {
+    const { access } = testbed
+    await access.initVault('password-123')
+    access.lock()
+    expect(await access.openWithSession()).toBeNull()
   })
 
   test('does not overwrite an existing vault', async () => {
-    await createVault('password', path)
-    await expect(createVault('other', path)).rejects.toThrow(VaultExistsError)
+    const { access } = testbed
+    await access.initVault('password-123')
+    await expect(access.initVault('other-password')).rejects.toThrow(VaultExistsError)
   })
 
   test('missing vault', async () => {
-    await expect(openVaultWithPassword('password', path)).rejects.toThrow(VaultNotFoundError)
+    await expect(testbed.access.openWithPassword('password-123')).rejects.toThrow(
+      VaultNotFoundError,
+    )
+  })
+
+  test('init rejects short passwords (min from config)', async () => {
+    await expect(testbed.access.initVault('short')).rejects.toThrow('at least 8 characters')
   })
 
   test('save keeps a .bak backup of the previous version', async () => {
-    const vault = await createVault('password', path)
-    setSecret(vault, DEFAULT_GROUP, 'A', '1')
-    await saveVault(vault)
+    const { access } = testbed
+    const vault = await access.initVault('password-123')
+    setSecret(vault.data, DEFAULT_GROUP, 'A', '1')
+    await access.saveVault(vault)
     expect(existsSync(path + '.bak')).toBe(true)
     expect(existsSync(path + '.tmp')).toBe(false)
   })
 
-  test('rekey changes the password and invalidates the old one', async () => {
-    const vault = await createVault('old-pass', path)
-    setSecret(vault, DEFAULT_GROUP, 'A', '1')
-    await saveVault(vault)
-    await rekeyVault(vault, 'new-pass')
+  test('changePassword invalidates the old password and clears the session', async () => {
+    const { access } = testbed
+    const vault = await access.initVault('old-password')
+    setSecret(vault.data, DEFAULT_GROUP, 'A', '1')
+    await access.saveVault(vault)
+    await access.changePassword(vault, 'new-password')
 
-    await expect(openVaultWithPassword('old-pass', path)).rejects.toThrow(WrongPasswordError)
-    expect(getSecret(await openVaultWithPassword('new-pass', path), DEFAULT_GROUP, 'A')?.value).toBe('1')
-  })
-
-  test('groups: set creates group, list sorts, remove protects default', async () => {
-    const vault = await createVault('password', path)
-    setSecret(vault, 'project-b', 'K', 'v')
-    setSecret(vault, 'project-a', 'K', 'v')
-    expect(listGroups(vault)).toEqual([DEFAULT_GROUP, 'project-a', 'project-b'])
-    expect(removeGroup(vault, 'project-b')).toBe(true)
-    expect(removeGroup(vault, DEFAULT_GROUP)).toBe(false)
-  })
-
-  test('remove secret and sorted listing', async () => {
-    const vault = await createVault('password', path)
-    setSecret(vault, DEFAULT_GROUP, 'B_VAR', '2')
-    setSecret(vault, DEFAULT_GROUP, 'A_VAR', '1')
-    expect(listSecrets(vault, DEFAULT_GROUP).map(([n]) => n)).toEqual(['A_VAR', 'B_VAR'])
-    expect(removeSecret(vault, DEFAULT_GROUP, 'A_VAR')).toBe(true)
-    expect(removeSecret(vault, DEFAULT_GROUP, 'MISSING')).toBe(false)
+    expect(await access.openWithSession()).toBeNull()
+    await expect(access.openWithPassword('old-password')).rejects.toThrow(WrongPasswordError)
+    const reopened = await access.openWithPassword('new-password')
+    expect(getSecret(reopened.data, DEFAULT_GROUP, 'A')?.value).toBe('1')
   })
 })
 
-describe('aliases', async () => {
-  test('resolveSecret matches canonical name and aliases', async () => {
-    const vault = await createVault('password', path)
-    setSecret(vault, DEFAULT_GROUP, 'DATABASE_URL', 'postgres://x')
-    addAliases(vault, DEFAULT_GROUP, 'DATABASE_URL', ['DB_URL', 'POSTGRES_URL'])
-
-    expect(resolveSecret(vault, DEFAULT_GROUP, 'DATABASE_URL')?.secret.value).toBe('postgres://x')
-    expect(resolveSecret(vault, DEFAULT_GROUP, 'DB_URL')?.name).toBe('DATABASE_URL')
-    expect(resolveSecret(vault, DEFAULT_GROUP, 'POSTGRES_URL')?.secret.value).toBe('postgres://x')
-    expect(resolveSecret(vault, DEFAULT_GROUP, 'NOPE')).toBeUndefined()
+describe('manage secrets use cases', () => {
+  test('saveSecret validates the name', async () => {
+    const { access, secrets } = testbed
+    const vault = await access.initVault('password-123')
+    await expect(
+      secrets.saveSecret(vault, DEFAULT_GROUP, { name: '1BAD', value: 'x' }),
+    ).rejects.toThrow('Invalid name')
   })
 
-  test('aliases survive save/reopen', async () => {
-    const vault = await createVault('password', path)
-    setSecret(vault, DEFAULT_GROUP, 'DATABASE_URL', 'postgres://x')
-    addAliases(vault, DEFAULT_GROUP, 'DATABASE_URL', ['DB_URL'])
-    await saveVault(vault)
-    const reopened = await openVaultWithPassword('password', path)
-    expect(resolveSecret(reopened, DEFAULT_GROUP, 'DB_URL')?.name).toBe('DATABASE_URL')
+  test('saveSecret rejects a name that is an alias of another secret', async () => {
+    const { access, secrets } = testbed
+    const vault = await access.initVault('password-123')
+    await secrets.saveSecret(vault, DEFAULT_GROUP, {
+      name: 'DATABASE_URL',
+      value: 'x',
+      aliases: ['DB_URL'],
+    })
+    await expect(
+      secrets.saveSecret(vault, DEFAULT_GROUP, { name: 'DB_URL', value: 'y' }),
+    ).rejects.toThrow('already an alias of "DATABASE_URL"')
   })
 
-  test('addAliases reports conflicts with existing names and aliases', async () => {
-    const vault = await createVault('password', path)
-    setSecret(vault, DEFAULT_GROUP, 'DATABASE_URL', 'x')
-    setSecret(vault, DEFAULT_GROUP, 'API_KEY', 'y')
-    addAliases(vault, DEFAULT_GROUP, 'API_KEY', ['TOKEN'])
+  test('saveSecret with previousName renames and persists', async () => {
+    const { access, secrets } = testbed
+    const vault = await access.initVault('password-123')
+    await secrets.saveSecret(vault, DEFAULT_GROUP, { name: 'OLD', value: '1' })
+    await secrets.saveSecret(vault, DEFAULT_GROUP, {
+      name: 'NEW',
+      value: '2',
+      previousName: 'OLD',
+    })
 
-    const { added, conflicts } = addAliases(vault, DEFAULT_GROUP, 'DATABASE_URL', [
+    const reopened = await access.openWithPassword('password-123')
+    expect(getSecret(reopened.data, DEFAULT_GROUP, 'OLD')).toBeUndefined()
+    expect(getSecret(reopened.data, DEFAULT_GROUP, 'NEW')?.value).toBe('2')
+  })
+
+  test('deleteSecret persists the removal', async () => {
+    const { access, secrets } = testbed
+    const vault = await access.initVault('password-123')
+    await secrets.saveSecret(vault, DEFAULT_GROUP, { name: 'A', value: '1' })
+    expect(await secrets.deleteSecret(vault, DEFAULT_GROUP, 'A')).toBe(true)
+    expect(await secrets.deleteSecret(vault, DEFAULT_GROUP, 'MISSING')).toBe(false)
+
+    const reopened = await access.openWithPassword('password-123')
+    expect(getSecret(reopened.data, DEFAULT_GROUP, 'A')).toBeUndefined()
+  })
+})
+
+describe('domain: secrets and groups', () => {
+  test('groups: set creates group, list sorts, remove protects default', () => {
+    const data = { groups: { [DEFAULT_GROUP]: {} } }
+    setSecret(data, 'project-b', 'K', 'v')
+    setSecret(data, 'project-a', 'K', 'v')
+    expect(listGroups(data)).toEqual([DEFAULT_GROUP, 'project-a', 'project-b'])
+    expect(removeGroup(data, 'project-b')).toBe(true)
+    expect(removeGroup(data, DEFAULT_GROUP)).toBe(false)
+  })
+
+  test('remove secret and sorted listing', () => {
+    const data = { groups: { [DEFAULT_GROUP]: {} } }
+    setSecret(data, DEFAULT_GROUP, 'B_VAR', '2')
+    setSecret(data, DEFAULT_GROUP, 'A_VAR', '1')
+    expect(listSecrets(data, DEFAULT_GROUP).map(([n]) => n)).toEqual(['A_VAR', 'B_VAR'])
+    expect(removeSecret(data, DEFAULT_GROUP, 'A_VAR')).toBe(true)
+    expect(removeSecret(data, DEFAULT_GROUP, 'MISSING')).toBe(false)
+  })
+})
+
+describe('domain: aliases', () => {
+  const fresh = () => ({ groups: { [DEFAULT_GROUP]: {} } })
+
+  test('resolveSecret matches canonical name and aliases', () => {
+    const data = fresh()
+    setSecret(data, DEFAULT_GROUP, 'DATABASE_URL', 'postgres://x')
+    addAliases(data, DEFAULT_GROUP, 'DATABASE_URL', ['DB_URL', 'POSTGRES_URL'])
+
+    expect(resolveSecret(data, DEFAULT_GROUP, 'DATABASE_URL')?.secret.value).toBe('postgres://x')
+    expect(resolveSecret(data, DEFAULT_GROUP, 'DB_URL')?.name).toBe('DATABASE_URL')
+    expect(resolveSecret(data, DEFAULT_GROUP, 'POSTGRES_URL')?.secret.value).toBe('postgres://x')
+    expect(resolveSecret(data, DEFAULT_GROUP, 'NOPE')).toBeUndefined()
+  })
+
+  test('addAliases reports conflicts with existing names and aliases', () => {
+    const data = fresh()
+    setSecret(data, DEFAULT_GROUP, 'DATABASE_URL', 'x')
+    setSecret(data, DEFAULT_GROUP, 'API_KEY', 'y')
+    addAliases(data, DEFAULT_GROUP, 'API_KEY', ['TOKEN'])
+
+    const { added, conflicts } = addAliases(data, DEFAULT_GROUP, 'DATABASE_URL', [
       'DB_URL',
       'API_KEY',
       'TOKEN',
@@ -144,44 +236,44 @@ describe('aliases', async () => {
     ])
   })
 
-  test('adding an alias twice is a no-op', async () => {
-    const vault = await createVault('password', path)
-    setSecret(vault, DEFAULT_GROUP, 'A', '1')
-    addAliases(vault, DEFAULT_GROUP, 'A', ['B'])
-    const { added, conflicts } = addAliases(vault, DEFAULT_GROUP, 'A', ['B'])
+  test('adding an alias twice is a no-op', () => {
+    const data = fresh()
+    setSecret(data, DEFAULT_GROUP, 'A', '1')
+    addAliases(data, DEFAULT_GROUP, 'A', ['B'])
+    const { added, conflicts } = addAliases(data, DEFAULT_GROUP, 'A', ['B'])
     expect(added).toEqual([])
     expect(conflicts).toEqual([])
-    expect(getSecret(vault, DEFAULT_GROUP, 'A')?.aliases).toEqual(['B'])
+    expect(getSecret(data, DEFAULT_GROUP, 'A')?.aliases).toEqual(['B'])
   })
 
-  test('removeAliases removes and cleans up the field when empty', async () => {
-    const vault = await createVault('password', path)
-    setSecret(vault, DEFAULT_GROUP, 'A', '1')
-    addAliases(vault, DEFAULT_GROUP, 'A', ['B', 'C'])
-    expect(removeAliases(vault, DEFAULT_GROUP, 'A', ['B'])).toEqual(['B'])
-    expect(getSecret(vault, DEFAULT_GROUP, 'A')?.aliases).toEqual(['C'])
-    expect(removeAliases(vault, DEFAULT_GROUP, 'A', ['C'])).toEqual(['C'])
-    expect(getSecret(vault, DEFAULT_GROUP, 'A')?.aliases).toBeUndefined()
+  test('removeAliases removes and cleans up the field when empty', () => {
+    const data = fresh()
+    setSecret(data, DEFAULT_GROUP, 'A', '1')
+    addAliases(data, DEFAULT_GROUP, 'A', ['B', 'C'])
+    expect(removeAliases(data, DEFAULT_GROUP, 'A', ['B'])).toEqual(['B'])
+    expect(getSecret(data, DEFAULT_GROUP, 'A')?.aliases).toEqual(['C'])
+    expect(removeAliases(data, DEFAULT_GROUP, 'A', ['C'])).toEqual(['C'])
+    expect(getSecret(data, DEFAULT_GROUP, 'A')?.aliases).toBeUndefined()
   })
 
-  test('ownerOfName sees direct names and aliases', async () => {
-    const vault = await createVault('password', path)
-    setSecret(vault, DEFAULT_GROUP, 'A', '1')
-    addAliases(vault, DEFAULT_GROUP, 'A', ['B'])
-    expect(ownerOfName(vault, DEFAULT_GROUP, 'A')).toBe('A')
-    expect(ownerOfName(vault, DEFAULT_GROUP, 'B')).toBe('A')
-    expect(ownerOfName(vault, DEFAULT_GROUP, 'C')).toBeUndefined()
+  test('ownerOfName sees direct names and aliases', () => {
+    const data = fresh()
+    setSecret(data, DEFAULT_GROUP, 'A', '1')
+    addAliases(data, DEFAULT_GROUP, 'A', ['B'])
+    expect(ownerOfName(data, DEFAULT_GROUP, 'A')).toBe('A')
+    expect(ownerOfName(data, DEFAULT_GROUP, 'B')).toBe('A')
+    expect(ownerOfName(data, DEFAULT_GROUP, 'C')).toBeUndefined()
   })
 
-  test('setSecret keeps existing aliases unless new ones are given', async () => {
-    const vault = await createVault('password', path)
-    setSecret(vault, DEFAULT_GROUP, 'A', '1')
-    addAliases(vault, DEFAULT_GROUP, 'A', ['B'])
-    setSecret(vault, DEFAULT_GROUP, 'A', '2')
-    expect(getSecret(vault, DEFAULT_GROUP, 'A')?.aliases).toEqual(['B'])
-    setSecret(vault, DEFAULT_GROUP, 'A', '3', undefined, ['C'])
-    expect(getSecret(vault, DEFAULT_GROUP, 'A')?.aliases).toEqual(['C'])
-    setSecret(vault, DEFAULT_GROUP, 'A', '4', undefined, [])
-    expect(getSecret(vault, DEFAULT_GROUP, 'A')?.aliases).toBeUndefined()
+  test('setSecret keeps existing aliases unless new ones are given', () => {
+    const data = fresh()
+    setSecret(data, DEFAULT_GROUP, 'A', '1')
+    addAliases(data, DEFAULT_GROUP, 'A', ['B'])
+    setSecret(data, DEFAULT_GROUP, 'A', '2')
+    expect(getSecret(data, DEFAULT_GROUP, 'A')?.aliases).toEqual(['B'])
+    setSecret(data, DEFAULT_GROUP, 'A', '3', undefined, ['C'])
+    expect(getSecret(data, DEFAULT_GROUP, 'A')?.aliases).toEqual(['C'])
+    setSecret(data, DEFAULT_GROUP, 'A', '4', undefined, [])
+    expect(getSecret(data, DEFAULT_GROUP, 'A')?.aliases).toBeUndefined()
   })
 })

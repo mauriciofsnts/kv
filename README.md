@@ -121,7 +121,18 @@ bun test            # crypto, vault, session, .env parser
 bun run typecheck   # tsc --noEmit
 ```
 
-Stack: [TermUI](https://www.termui.io) (`@termuijs/*` 0.1.7) for the TUI; the core (crypto/vault/apply) uses only Node/Bun built-ins.
+Stack: [TermUI](https://www.termui.io) (`@termuijs/*` 0.1.7) for the TUI; everything else uses only Node/Bun built-ins.
+
+The codebase follows Clean Architecture — dependencies point inward only:
+
+```
+src/
+├── domain/           # entities + pure rules (secrets/aliases, .env parser) — no I/O
+├── application/      # use cases + ports (interfaces the use cases depend on)
+├── infrastructure/   # port implementations: crypto, file/SQL storage, session, config
+├── presentation/     # CLI and TUI, calling use cases only
+└── composition.ts    # the single place wiring implementations to ports
+```
 
 ### Notes on @termuijs 0.1.7
 

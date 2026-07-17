@@ -1,5 +1,5 @@
 import { createStore } from '@termuijs/store'
-import type { Vault } from '../core/vault.ts'
+import type { Vault } from '../../application/vault.ts'
 
 export type Mode = 'unlock' | 'browse' | 'filter' | 'add' | 'edit' | 'confirm-delete' | 'new-group'
 

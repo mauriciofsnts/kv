@@ -5,13 +5,8 @@
 // the terminal size.
 import type { KeyEvent } from '@termuijs/core'
 import { useInput, useKeymap, useRef, useState } from '@termuijs/jsx'
-import {
-  type Secret,
-  listGroups,
-  listSecrets,
-  removeSecret,
-  saveVault,
-} from '../core/vault.ts'
+import { manageSecrets } from '../../composition.ts'
+import { type Secret, listGroups, listSecrets } from '../../domain/secret.ts'
 import { SecretForm } from './SecretForm.tsx'
 import { useTuiStore } from './store.ts'
 import { useTermSize } from './useTermSize.ts'
@@ -29,6 +24,12 @@ function visibleSecrets(filter: string, secrets: [string, Secret][]): [string, S
       name.toLowerCase().includes(needle) ||
       secret.aliases?.some((a) => a.toLowerCase().includes(needle)),
   )
+}
+
+function reportSaveError(err: unknown): void {
+  useTuiStore
+    .getState()
+    .setStatus(`✗ save failed: ${err instanceof Error ? err.message : String(err)}`)
 }
 
 export function Dashboard() {
@@ -65,7 +66,7 @@ function FormPanel({ width, height }: PanelProps) {
   const filter = useTuiStore((s) => s.filter)
 
   if (mode === 'edit' && vault) {
-    const entry = visibleSecrets(filter, listSecrets(vault, group))[selected]
+    const entry = visibleSecrets(filter, listSecrets(vault.data, group))[selected]
     if (entry) {
       const [name, secret] = entry
       return (
@@ -86,7 +87,7 @@ function FormPanel({ width, height }: PanelProps) {
 function GroupSidebar({ height }: PanelProps) {
   const vault = useTuiStore((s) => s.vault)
   const group = useTuiStore((s) => s.group)
-  const groups = vault ? listGroups(vault) : []
+  const groups = vault ? listGroups(vault.data) : []
   const innerWidth = SIDEBAR_WIDTH - 4
 
   return (
@@ -110,7 +111,7 @@ function SecretList({ width, height }: PanelProps) {
   const filter = useTuiStore((s) => s.filter)
   const revealed = useTuiStore((s) => s.revealed)
 
-  const secrets = vault ? visibleSecrets(filter, listSecrets(vault, group)) : []
+  const secrets = vault ? visibleSecrets(filter, listSecrets(vault.data, group)) : []
   const innerWidth = width! - 4
   const valueCol = Math.max(10, innerWidth - NAME_COL - DATE_COL - 2)
   // Scroll window: keeps the selection visible when there are more rows
@@ -166,7 +167,7 @@ function BrowseKeymap({ count, names }: { count: number; names: string[] }) {
   const switchGroup = (offset: number) => {
     const s = useTuiStore.getState()
     if (!s.vault) return
-    const groups = listGroups(s.vault)
+    const groups = listGroups(s.vault.data)
     const current = groups.indexOf(s.group)
     const next = groups[(current + offset + groups.length) % groups.length]
     if (next) s.setGroup(next)
@@ -236,10 +237,9 @@ function ConfirmDelete({ width, names }: { width: number; names: string[] }) {
         const s = useTuiStore.getState()
         const target = names[s.selected]
         if (s.vault && target) {
-          removeSecret(s.vault, s.group, target)
-          saveVault(s.vault).catch((err: unknown) =>
-            s.setStatus(`✗ save failed: ${err instanceof Error ? err.message : String(err)}`),
-          )
+          manageSecrets
+            .deleteSecret(s.vault, s.group, target)
+            .catch(reportSaveError)
           s.setStatus(`✓ ${target} removed`)
           s.setSelected(Math.max(0, s.selected - 1))
         }
@@ -267,10 +267,7 @@ function NewGroupInput({ width }: { width: number }) {
     if (key === 'enter' || key === 'return') {
       const trimmed = nameRef.current.trim()
       if (s.vault && trimmed) {
-        s.vault.data.groups[trimmed] ??= {}
-        saveVault(s.vault).catch((err: unknown) =>
-          s.setStatus(`✗ save failed: ${err instanceof Error ? err.message : String(err)}`),
-        )
+        manageSecrets.createGroup(s.vault, trimmed).catch(reportSaveError)
         s.setGroup(trimmed)
         s.setStatus(`✓ group "${trimmed}" created`)
       }

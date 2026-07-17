@@ -1,4 +1,4 @@
-// Command-line prompts with no TermUI dependency: the CLI must work in
+// Command-line prompts with no TUI dependency: the CLI must work in
 // pipes and scripts, where spinning up a TUI app makes no sense.
 
 export async function hiddenPrompt(label: string): Promise<string> {

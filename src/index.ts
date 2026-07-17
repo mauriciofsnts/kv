@@ -1,12 +1,11 @@
 #!/usr/bin/env bun
 import { parseArgs } from 'node:util'
-import { cmdApply } from './cli/apply.ts'
-import { cmdInit } from './cli/init.ts'
-import { cmdAlias, cmdGet, cmdList, cmdPasswd, cmdRm, cmdSet } from './cli/secrets.ts'
-import { cmdVault } from './cli/vaultcmd.ts'
-import { WrongPasswordError } from './core/crypto.ts'
-import { clearSession } from './core/session.ts'
-import { VaultExistsError, VaultNotFoundError } from './core/vault.ts'
+import { VaultExistsError, VaultNotFoundError, WrongPasswordError } from './domain/errors.ts'
+import { vaultAccess } from './composition.ts'
+import { cmdApply } from './presentation/cli/apply.ts'
+import { cmdInit } from './presentation/cli/init.ts'
+import { cmdAlias, cmdGet, cmdList, cmdPasswd, cmdRm, cmdSet } from './presentation/cli/secrets.ts'
+import { cmdVault } from './presentation/cli/vaultcmd.ts'
 
 const HELP = `key — encrypted .env manager
 
@@ -60,7 +59,7 @@ async function main(): Promise<void> {
 
   switch (command) {
     case undefined: {
-      const { runTui } = await import('./tui/run.ts')
+      const { runTui } = await import('./presentation/tui/run.ts')
       await runTui()
       break
     }
@@ -89,7 +88,7 @@ async function main(): Promise<void> {
       await cmdVault(arg)
       break
     case 'lock':
-      clearSession()
+      vaultAccess.lock()
       console.log('Session ended.')
       break
     case 'passwd':

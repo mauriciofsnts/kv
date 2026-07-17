@@ -1,9 +1,8 @@
 /** @jsxImportSource @termuijs/jsx */
 import type { KeyEvent } from '@termuijs/core'
 import { useInput, useRef, useState } from '@termuijs/jsx'
-import { WrongPasswordError } from '../core/crypto.ts'
-import { storeSessionKey } from '../core/session.ts'
-import { openVaultWithPassword } from '../core/vault.ts'
+import { vaultAccess } from '../../composition.ts'
+import { WrongPasswordError } from '../../domain/errors.ts'
 import { Field, editValue } from './inputs.tsx'
 import { useTuiStore } from './store.ts'
 
@@ -27,8 +26,8 @@ export function UnlockScreen() {
     const current = passwordRef.current
     if (current === '') return
     try {
-      const vault = await openVaultWithPassword(current)
-      storeSessionKey(vault.key)
+      const vault = await vaultAccess.openWithPassword(current)
+      vaultAccess.startSession(vault)
       setVault(vault)
     } catch (err) {
       if (err instanceof WrongPasswordError) {

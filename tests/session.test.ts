@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { minPasswordLength } from '../src/core/paths.ts'
-import { clearSession, loadSessionKey, storeSessionKey } from '../src/core/session.ts'
+import { jsonConfigStore } from '../src/infrastructure/config/json-config-store.ts'
+import { fileSessionCache } from '../src/infrastructure/session/file-session-cache.ts'
 
 let dir: string
 
@@ -23,65 +23,65 @@ afterEach(() => {
 describe('session', () => {
   test('store + load returns the same key', () => {
     const key = Buffer.from('a'.repeat(32))
-    storeSessionKey(key)
-    expect(loadSessionKey()?.equals(key)).toBe(true)
+    fileSessionCache.store(key)
+    expect(fileSessionCache.load()?.equals(key)).toBe(true)
   })
 
   test('no session returns null', () => {
-    expect(loadSessionKey()).toBeNull()
+    expect(fileSessionCache.load()).toBeNull()
   })
 
   test('expired session returns null and deletes the file', () => {
     process.env.KEY_SESSION_TTL = '1'
     const key = Buffer.from('b'.repeat(32))
-    storeSessionKey(key)
+    fileSessionCache.store(key)
     const raw = JSON.parse(readFileSync(process.env.KEY_SESSION_PATH!, 'utf8'))
     raw.expiresAt = Date.now() - 1000
     writeFileSync(process.env.KEY_SESSION_PATH!, JSON.stringify(raw))
-    expect(loadSessionKey()).toBeNull()
+    expect(fileSessionCache.load()).toBeNull()
   })
 
   test('load renews the TTL', () => {
     const key = Buffer.from('c'.repeat(32))
-    storeSessionKey(key)
+    fileSessionCache.store(key)
     const before = JSON.parse(readFileSync(process.env.KEY_SESSION_PATH!, 'utf8')).expiresAt
     Bun.sleepSync(5)
-    loadSessionKey()
+    fileSessionCache.load()
     const after = JSON.parse(readFileSync(process.env.KEY_SESSION_PATH!, 'utf8')).expiresAt
     expect(after).toBeGreaterThan(before)
   })
 
   test('clearSession deletes and locking twice is safe', () => {
-    storeSessionKey(Buffer.from('d'.repeat(32)))
-    clearSession()
-    expect(loadSessionKey()).toBeNull()
-    clearSession()
+    fileSessionCache.store(Buffer.from('d'.repeat(32)))
+    fileSessionCache.clear()
+    expect(fileSessionCache.load()).toBeNull()
+    fileSessionCache.clear()
   })
 
   test('corrupted file is treated as no session', () => {
     writeFileSync(process.env.KEY_SESSION_PATH!, 'not json')
-    expect(loadSessionKey()).toBeNull()
+    expect(fileSessionCache.load()).toBeNull()
   })
 })
 
 describe('minPasswordLength', () => {
   test('defaults to 8', () => {
-    expect(minPasswordLength()).toBe(8)
+    expect(jsonConfigStore.minPasswordLength()).toBe(8)
   })
 
   test('reads KEY_MIN_PASSWORD_LENGTH', () => {
     process.env.KEY_MIN_PASSWORD_LENGTH = '12'
-    expect(minPasswordLength()).toBe(12)
+    expect(jsonConfigStore.minPasswordLength()).toBe(12)
     process.env.KEY_MIN_PASSWORD_LENGTH = '1'
-    expect(minPasswordLength()).toBe(1)
+    expect(jsonConfigStore.minPasswordLength()).toBe(1)
   })
 
   test('falls back to 8 on invalid values', () => {
     process.env.KEY_MIN_PASSWORD_LENGTH = 'abc'
-    expect(minPasswordLength()).toBe(8)
+    expect(jsonConfigStore.minPasswordLength()).toBe(8)
     process.env.KEY_MIN_PASSWORD_LENGTH = '0'
-    expect(minPasswordLength()).toBe(8)
+    expect(jsonConfigStore.minPasswordLength()).toBe(8)
     process.env.KEY_MIN_PASSWORD_LENGTH = '-5'
-    expect(minPasswordLength()).toBe(8)
+    expect(jsonConfigStore.minPasswordLength()).toBe(8)
   })
 })

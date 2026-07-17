@@ -1,13 +1,7 @@
 /** @jsxImportSource @termuijs/jsx */
 import type { KeyEvent } from '@termuijs/core'
 import { useInput, useRef, useState } from '@termuijs/jsx'
-import {
-  NAME_PATTERN,
-  ownerOfName,
-  removeSecret,
-  saveVault,
-  setSecret,
-} from '../core/vault.ts'
+import { manageSecrets } from '../../composition.ts'
 import { Field, editValue } from './inputs.tsx'
 import { useTuiStore } from './store.ts'
 
@@ -23,7 +17,8 @@ interface SecretFormProps {
 const FIELD_COUNT = 4
 
 // Add/edit form: a single useInput routes navigation (Tab/↑↓), Enter
-// (save), Esc (cancel) and text editing to the focused field.
+// (save), Esc (cancel) and text editing to the focused field. Validation
+// and persistence live in the manageSecrets use case, shared with the CLI.
 export function SecretForm({
   width,
   height,
@@ -57,7 +52,7 @@ export function SecretForm({
   const [name, value, note, aliasesText] = fields as [string, string, string, string]
   const innerWidth = width - 4
 
-  const save = () => {
+  const save = async () => {
     if (!vault) return
     const [currentName, currentValue, currentNote, currentAliases] = fieldsRef.current as [
       string,
@@ -65,42 +60,19 @@ export function SecretForm({
       string,
       string,
     ]
-    const trimmed = currentName.trim()
-    if (!NAME_PATTERN.test(trimmed)) {
-      setError('Invalid name: use letters, numbers and _ (cannot start with a number).')
-      return
+    try {
+      const savedName = await manageSecrets.saveSecret(vault, group, {
+        name: currentName,
+        value: currentValue,
+        note: currentNote,
+        aliases: currentAliases.split(/[,\s]+/).filter((a) => a !== ''),
+        previousName: mode === 'edit' ? initialName : undefined,
+      })
+      setStatus(`✓ ${savedName} saved to group "${group}"`)
+      setMode('browse')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
     }
-    const aliases = currentAliases
-      .split(/[,\s]+/)
-      .map((a) => a.trim())
-      .filter((a) => a !== '' && a !== trimmed)
-    const badAlias = aliases.find((a) => !NAME_PATTERN.test(a))
-    if (badAlias) {
-      setError(`Invalid alias "${badAlias}": use letters, numbers and _.`)
-      return
-    }
-    for (const alias of aliases) {
-      const owner = ownerOfName(vault, group, alias)
-      if (owner && owner !== trimmed && owner !== initialName) {
-        setError(`Alias "${alias}" is already taken by "${owner}".`)
-        return
-      }
-    }
-    const owner = ownerOfName(vault, group, trimmed)
-    if (owner && owner !== trimmed && owner !== initialName) {
-      setError(`"${trimmed}" is already an alias of "${owner}".`)
-      return
-    }
-    if (mode === 'edit' && initialName && initialName !== trimmed) {
-      removeSecret(vault, group, initialName)
-    }
-    setSecret(vault, group, trimmed, currentValue, currentNote.trim() || undefined, aliases)
-    // Persistence may hit a database; report failures instead of crashing.
-    saveVault(vault).catch((err: unknown) =>
-      setStatus(`✗ save failed: ${err instanceof Error ? err.message : String(err)}`),
-    )
-    setStatus(`✓ ${trimmed} saved to group "${group}"`)
-    setMode('browse')
   }
 
   useInput((key: string, event: KeyEvent) => {
@@ -118,7 +90,7 @@ export function SecretForm({
       return
     }
     if (key === 'enter' || key === 'return') {
-      save()
+      void save()
       return
     }
     setFields((current: string[]) => {
