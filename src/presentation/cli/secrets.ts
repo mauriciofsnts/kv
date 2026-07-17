@@ -28,9 +28,13 @@ export async function cmdSet(name: string | undefined, groupFlag?: string): Prom
   console.log(`✓ ${name} saved to group "${group}".`)
 }
 
-export async function cmdGet(name: string | undefined, groupFlag?: string): Promise<void> {
+export async function cmdGet(
+  name: string | undefined,
+  groupFlag?: string,
+  copy = false,
+): Promise<void> {
   if (!name) {
-    console.error('Usage: key get NAME [--group group]')
+    console.error('Usage: key get NAME [--group group] [--copy]')
     process.exit(1)
   }
   const vault = await unlockVault()
@@ -39,6 +43,17 @@ export async function cmdGet(name: string | undefined, groupFlag?: string): Prom
   if (!resolved) {
     console.error(`"${name}" does not exist in group "${group}".`)
     process.exit(1)
+  }
+  if (copy) {
+    const { CLIPBOARD_CLEAR_SECONDS, copyToClipboard } = await import('../clipboard.ts')
+    try {
+      const tool = await copyToClipboard(resolved.secret.value)
+      console.log(`✓ ${name} copied to clipboard via ${tool} (clears in ${CLIPBOARD_CLEAR_SECONDS}s).`)
+    } catch (err) {
+      console.error(err instanceof Error ? err.message : String(err))
+      process.exit(1)
+    }
+    return
   }
   process.stdout.write(resolved.secret.value + (process.stdout.isTTY ? '\n' : ''))
 }

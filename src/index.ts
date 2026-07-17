@@ -3,7 +3,10 @@ import { parseArgs } from 'node:util'
 import { VaultExistsError, VaultNotFoundError, WrongPasswordError } from './domain/errors.ts'
 import { vaultAccess } from './composition.ts'
 import { cmdApply } from './presentation/cli/apply.ts'
+import { cmdDiff } from './presentation/cli/diffcmd.ts'
 import { cmdInit } from './presentation/cli/init.ts'
+import { cmdRun } from './presentation/cli/run.ts'
+import { cmdScan } from './presentation/cli/scan.ts'
 import { cmdAlias, cmdGet, cmdList, cmdPasswd, cmdRm, cmdSet } from './presentation/cli/secrets.ts'
 import { cmdImport, cmdShare } from './presentation/cli/share.ts'
 import { cmdVault } from './presentation/cli/vaultcmd.ts'
@@ -14,8 +17,12 @@ Usage:
   key                       Open the TUI
   key init                  Create the vault
   key apply <VAR|all>       Fill values into ./.env
+  key apply all --from F    Generate ./.env from a template (e.g. .env.example)
+  key run -- CMD [args]     Run a command with the group's secrets as env vars
+  key scan                  Import an existing ./.env into the vault
+  key diff                  Show drift between ./.env and the vault (names only)
   key set NAME              Store a secret (value via hidden prompt)
-  key get NAME              Print a secret's value
+  key get NAME [--copy]     Print a secret's value (or copy it, auto-clears)
   key list                  List groups and names (never values)
   key rm NAME               Remove a secret
   key alias NAME            List a secret's aliases
@@ -31,7 +38,9 @@ Usage:
 
 Options:
   --group, -g <group>       Vault group (default: .key file in the directory, else "default")
-  --env, -e <file>          Target file for apply (default: ./.env)
+  --env, -e <file>          Target file for apply/scan/diff (default: ./.env)
+  --from <file>             Template file for \`key apply all --from\`
+  --copy, -c                key get: copy to clipboard instead of printing
   --help, -h                Show this help
 
 Environment variables:
@@ -43,11 +52,20 @@ Environment variables:
 `
 
 async function main(): Promise<void> {
+  // Everything after `--` goes untouched to `key run` (the child command's
+  // own flags must not be parsed as ours).
+  const rawArgs = process.argv.slice(2)
+  const dashDash = rawArgs.indexOf('--')
+  const ownArgs = dashDash === -1 ? rawArgs : rawArgs.slice(0, dashDash)
+  const passthrough = dashDash === -1 ? [] : rawArgs.slice(dashDash + 1)
+
   const { values, positionals } = parseArgs({
-    args: process.argv.slice(2),
+    args: ownArgs,
     options: {
       group: { type: 'string', short: 'g' },
       env: { type: 'string', short: 'e' },
+      from: { type: 'string' },
+      copy: { type: 'boolean', short: 'c' },
       help: { type: 'boolean', short: 'h' },
     },
     allowPositionals: true,
@@ -70,13 +88,22 @@ async function main(): Promise<void> {
       await cmdInit()
       break
     case 'apply':
-      await cmdApply(arg, { group: values.group, envFile: values.env })
+      await cmdApply(arg, { group: values.group, envFile: values.env, from: values.from })
+      break
+    case 'run':
+      await cmdRun(passthrough.length > 0 ? passthrough : positionals.slice(1), values.group)
+      break
+    case 'scan':
+      await cmdScan(values.group, values.env)
+      break
+    case 'diff':
+      await cmdDiff(values.group, values.env)
       break
     case 'set':
       await cmdSet(arg, values.group)
       break
     case 'get':
-      await cmdGet(arg, values.group)
+      await cmdGet(arg, values.group, values.copy)
       break
     case 'list':
       await cmdList(values.group)

@@ -20,10 +20,15 @@ bun link   # puts the `key` command on your PATH
 ```bash
 key init                        # create the vault (~/.config/key/vault.enc)
 key                             # open the TUI
+key scan                        # import an existing ./.env into the vault
 key set POSTGRES_DB             # store a secret (value via hidden prompt)
 key apply POSTGRES_DB           # replace the value in ./.env
 key apply all                   # apply everything the vault knows about
+key apply all --from .env.example   # generate ./.env from a template
+key run -- npm start            # run with secrets as env vars (no .env at all)
+key diff                        # drift between ./.env and the vault (names only)
 key get POSTGRES_DB             # print the value (pipe-friendly)
+key get POSTGRES_DB --copy      # copy to clipboard, auto-clears in 30s
 key list                        # list groups and names (never values)
 key rm POSTGRES_DB              # remove with confirmation
 key alias add DATABASE_URL DB_URL POSTGRES_URL   # alternative names, same value
@@ -98,12 +103,20 @@ Secrets live in groups inside the vault (`default` if unspecified). Group resolu
 echo "my-project" > .key   # every `key apply` in this directory uses the my-project group
 ```
 
+### Daily workflow
+
+- **`key scan`** — onboarding: reads the current `.env` and imports its variables into the vault, previewing what is new/updated/unchanged (names only, never values) before asking for confirmation.
+- **`key run -- <command>`** — runs a command with the group's secrets (canonical names *and* aliases) injected as environment variables. No plaintext ever touches the disk; the child's exit code is propagated.
+- **`key diff`** — drift report between `.env` and the vault: in sync / value differs / missing from vault / in vault but not in the file. Prints names only and exits 1 when values differ, so it can gate scripts and CI.
+- **`key get NAME --copy`** (or the `c` key in the TUI) — copies the value to the clipboard via `wl-copy`/`xclip`/`xsel` and auto-clears it after 30 seconds (only if the clipboard still holds that value).
+
 ### apply
 
 - Edits the `.env` **in-place**, preserving comments, line order, `export` prefix and CRLF.
 - Values with spaces/`#`/quotes get double quotes automatically.
 - `key apply VAR` with a variable missing from the `.env` asks before appending it at the end.
 - `key apply all` prints a summary: `✓ 4 applied · − 2 missing from vault (...)`.
+- `key apply all --from .env.example` generates the target from a template instead of patching in place (the template is never modified; variables the vault doesn't know keep their template value).
 - `--env file` targets another file (default `./.env`).
 
 ### TUI
@@ -116,6 +129,7 @@ echo "my-project" > .key   # every `key apply` in this directory uses the my-pro
 | `←→` | Switch group |
 | `a` / `e` / `d` | Add / edit / delete (with confirmation) |
 | `v` | Reveal/mask the selected value |
+| `c` | Copy the selected value (auto-clears in 30s) |
 | `/` | Search by name or alias |
 | `g` | Create group |
 | `q` | Quit |

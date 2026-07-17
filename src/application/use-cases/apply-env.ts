@@ -1,13 +1,27 @@
 // The `key apply` flow: fill real values into a .env file, resolving
 // canonical names and aliases alike, preserving the file's formatting.
-import { appendEnvVar, listEnvVars, setEnvValue } from '../../domain/env-file.ts'
-import { resolveSecret } from '../../domain/secret.ts'
+import {
+  type EnvEntry,
+  appendEnvVar,
+  listEnvVars,
+  parseEnvEntries,
+  setEnvValue,
+} from '../../domain/env-file.ts'
+import { listSecrets, resolveSecret } from '../../domain/secret.ts'
 import type { EnvFileGateway } from '../ports.ts'
 import type { Vault } from '../vault.ts'
 
 export interface ApplyAllResult {
   applied: string[]
   missing: string[]
+}
+
+export interface EnvDiff {
+  // Names only — values never leave this function.
+  inSync: string[]
+  differs: string[]
+  missingFromVault: string[]
+  notInEnv: string[]
 }
 
 export function makeApplyEnv(envFiles: EnvFileGateway) {
@@ -55,6 +69,53 @@ export function makeApplyEnv(envFiles: EnvFileGateway) {
         throw new Error(`"${name}" does not exist in group "${group}" of the vault.`)
       }
       envFiles.write(envPath, appendEnvVar(envFiles.read(envPath), name, resolved.secret.value))
+    },
+
+    // Template mode: fill every variable of `templatePath` from the vault
+    // and write the result to `targetPath`, leaving the template untouched.
+    applyTemplate(
+      vault: Vault,
+      group: string,
+      templatePath: string,
+      targetPath: string,
+    ): ApplyAllResult {
+      let content = envFiles.read(templatePath)
+      const applied: string[] = []
+      const missing: string[] = []
+      for (const { name } of listEnvVars(content)) {
+        const resolved = resolveSecret(vault.data, group, name)
+        if (resolved) {
+          content = setEnvValue(content, name, resolved.secret.value).content
+          applied.push(name)
+        } else {
+          missing.push(name)
+        }
+      }
+      envFiles.write(targetPath, content)
+      return { applied, missing }
+    },
+
+    // Drift report between a .env file and the vault. Compares values but
+    // only ever returns names.
+    diff(vault: Vault, group: string, envPath: string): EnvDiff {
+      const entries = parseEnvEntries(envFiles.read(envPath))
+      const envNames = new Set(entries.map((e) => e.name))
+      const result: EnvDiff = { inSync: [], differs: [], missingFromVault: [], notInEnv: [] }
+      for (const { name, value } of entries) {
+        const resolved = resolveSecret(vault.data, group, name)
+        if (!resolved) result.missingFromVault.push(name)
+        else if (resolved.secret.value === value) result.inSync.push(name)
+        else result.differs.push(name)
+      }
+      for (const [name, secret] of listSecrets(vault.data, group)) {
+        const present = envNames.has(name) || secret.aliases?.some((a) => envNames.has(a))
+        if (!present) result.notInEnv.push(name)
+      }
+      return result
+    },
+
+    readEntries(envPath: string): EnvEntry[] {
+      return parseEnvEntries(envFiles.read(envPath))
     },
   }
 }

@@ -22,6 +22,13 @@ export interface SaveSecretInput {
   previousName?: string
 }
 
+export interface ImportPlan {
+  add: string[]
+  replace: string[]
+  unchanged: string[]
+  conflicts: { name: string; owner: string }[]
+}
+
 export function makeManageSecrets(access: Pick<VaultAccess, 'saveVault'>) {
   return {
     async saveSecret(vault: Vault, group: string, input: SaveSecretInput): Promise<string> {
@@ -97,6 +104,44 @@ export function makeManageSecrets(access: Pick<VaultAccess, 'saveVault'>) {
     async createGroup(vault: Vault, group: string): Promise<void> {
       createGroup(vault.data, group)
       await access.saveVault(vault)
+    },
+
+    // Bulk import of name/value pairs (the `key scan` flow). planImport
+    // classifies without touching anything; importEntries applies the
+    // non-conflicting part of the plan with a single save.
+    planImport(vault: Vault, group: string, entries: { name: string; value: string }[]): ImportPlan {
+      const plan: ImportPlan = { add: [], replace: [], unchanged: [], conflicts: [] }
+      for (const { name, value } of entries) {
+        const owner = ownerOfName(vault.data, group, name)
+        if (owner && owner !== name) {
+          plan.conflicts.push({ name, owner })
+          continue
+        }
+        const existing = getSecret(vault.data, group, name)
+        if (!existing) plan.add.push(name)
+        else if (existing.value === value) plan.unchanged.push(name)
+        else plan.replace.push(name)
+      }
+      return plan
+    },
+
+    async importEntries(
+      vault: Vault,
+      group: string,
+      entries: { name: string; value: string }[],
+    ): Promise<{ added: string[]; replaced: string[] }> {
+      const plan = this.planImport(vault, group, entries)
+      const toWrite = new Set([...plan.add, ...plan.replace])
+      const added: string[] = []
+      const replaced: string[] = []
+      for (const { name, value } of entries) {
+        if (!toWrite.has(name)) continue
+        const existed = Boolean(getSecret(vault.data, group, name))
+        setSecret(vault.data, group, name, value)
+        ;(existed ? replaced : added).push(name)
+      }
+      if (added.length > 0 || replaced.length > 0) await access.saveVault(vault)
+      return { added, replaced }
     },
   }
 }
