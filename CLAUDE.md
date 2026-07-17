@@ -19,24 +19,25 @@ bun link                       # put `key` on PATH (~/.bun/bin/key)
 
 There is no lint setup. `bun.lock` is the source of truth (`pnpm-lock.yaml` is a leftover).
 
-## Architecture
+## Architecture (Clean Architecture)
 
-Three layers with a strict dependency rule: `src/core/` must never import from `src/tui/` or `src/cli/`, and uses only Node/Bun built-ins (no `@termuijs/*`). This isolation is deliberate — the TUI framework is v0.1.x and may be swapped out.
+Dependencies point strictly inward: `domain` ← `application` ← (`infrastructure`, `presentation`), with `src/composition.ts` as the only place that binds implementations to ports. `bunx tsc --noEmit` won't catch layer violations — respect them by convention:
 
-- **`src/core/`** — crypto (scrypt + AES-256-GCM envelope; wrong password = GCM auth failure → `WrongPasswordError`), vault model (groups → secrets, each secret optionally carrying `aliases`), storage backends, session cache, `.env` parser.
-- **`src/cli/`** — subcommand implementations dispatched from `src/index.ts` (`util.parseArgs`). Prompts are hand-rolled in `cli/prompt.ts` (raw-mode hidden input); secret values never pass through argv.
-- **`src/tui/`** — TermUI (`@termuijs/*`) app, entered via dynamic import only when `key` runs with no subcommand.
+- **`src/domain/`** — entities and pure business rules; zero imports from other layers, zero I/O. `secret.ts` (groups/secrets/aliases operations on plain `VaultData`), `env-file.ts` (the line-preserving .env parser), `errors.ts`.
+- **`src/application/`** — `ports.ts` (interfaces: `CryptoProvider`, `VaultRepository`, `SessionCache`, `ConfigStore`, `EnvFileGateway`, plus the `EncryptedEnvelope`/`KdfParams` contracts) and `use-cases/` (factories taking ports: `vault-access` for init/unlock/save/rekey/session, `manage-secrets` for validated mutations shared by CLI and TUI, `apply-env`, `relocate-vault`). `vault.ts` defines the unlocked-`Vault` handle (data + key + kdf + repository).
+- **`src/infrastructure/`** — port implementations: `crypto/node-crypto.ts` (scrypt + AES-256-GCM; bad password → `WrongPasswordError` from GCM auth), `storage/` (file repository with `.tmp`+rename+`.bak`; SQL repository over `Bun.SQL` — single-row `key_vault` table, previous version in a `previous` column, dialect-portable SELECT then UPDATE/INSERT; `repository-factory.ts` picks by URL scheme), `session/file-session-cache.ts`, `config/json-config-store.ts`, `env/fs-env-files.ts`.
+- **`src/presentation/`** — `cli/` (subcommands dispatched from `src/index.ts` via `util.parseArgs`; raw-mode hidden prompts in `cli/prompt.ts` — secret values never pass through argv) and `tui/` (TermUI app, dynamically imported only when `key` runs bare). Presentation imports use cases from `src/composition.ts` and domain read functions directly; it must never import `src/infrastructure/`.
 
 Cross-cutting flows worth knowing before editing:
 
-- **Storage abstraction** (`core/storage.ts`): the vault "location" is a plain file path (atomic write via `.tmp` + rename, previous version in `.bak`) or a database URL — `sqlite://`, `postgres://`, `postgresql://`, `mysql://`, `mariadb://` — handled by one `SqlStorage` class over `Bun.SQL` (single-row `key_vault` table, previous version in a `previous` column; SQL kept dialect-portable: SELECT then UPDATE/INSERT, no upsert). Location resolution: `KEY_VAULT_PATH` env > `~/.config/key/config.json` (`key vault` command writes it) > default file. Vault functions in `core/vault.ts` are async because of this; they accept a storage instance, a location string, or nothing.
-- **Session** (`core/session.ts`): after unlock, the *derived key* (never the password) is cached in `$XDG_RUNTIME_DIR/key/session` with a TTL renewed on each use. Both CLI (`cli/unlock.ts`) and TUI (`tui/run.ts`) try the session before prompting. Changing the password rekeys the vault and clears the session.
-- **Alias resolution** (`core/vault.ts`): `resolveSecret` matches canonical names *and* aliases; `get`/`apply` go through it, while `set`/`rm`/`alias` operate on canonical names and use `ownerOfName` to reject collisions (an alias may not shadow any name/alias in its group).
-- **`.env` patching** (`core/envfile.ts`): line-preserving by design — comments, order, `export` prefix, CRLF, missing trailing newline all survive. Duplicated variables are all updated on purpose. Don't replace this with a generic dotenv library; round-trip fidelity is the point.
+- **Vault location**: a plain file path or a database URL (`sqlite://`, `postgres://`, `postgresql://`, `mysql://`, `mariadb://`). Resolution (in `json-config-store.ts`): `KEY_VAULT_PATH` env > `~/.config/key/config.json` (written by `key vault`) > default file. Only ciphertext ever reaches a repository.
+- **Session**: after unlock, the *derived key* (never the password) is cached in `$XDG_RUNTIME_DIR/key/session` with a TTL renewed on each use. CLI (`presentation/cli/unlock.ts`) and TUI (`presentation/tui/run.ts`) both call `vaultAccess.openWithSession()` before prompting. `changePassword` rekeys and clears the session.
+- **Alias resolution** (`domain/secret.ts`): `resolveSecret` matches canonical names *and* aliases; `get`/`apply` go through it, while mutations validate via `ownerOfName` (an alias may not shadow any name/alias in its group). Mutation validation lives in the `manage-secrets` use case — don't duplicate it in presentation.
+- **`.env` patching** (`domain/env-file.ts`): line-preserving by design — comments, order, `export` prefix, CRLF, missing trailing newline all survive. Duplicated variables are all updated on purpose. Don't replace this with a generic dotenv library; round-trip fidelity is the point.
 
 ## Tests
 
-Tests isolate all global state through env vars read lazily by `core/paths.ts`: `KEY_VAULT_PATH`, `KEY_SESSION_PATH`, `KEY_SESSION_TTL`, `KEY_MIN_PASSWORD_LENGTH`, `XDG_CONFIG_HOME` — set them in `beforeEach`, delete in `afterEach` (existing suites show the pattern). Postgres/MySQL have no automated integration tests; verify manually against a container (`podman run --rm -e POSTGRES_PASSWORD=test -p 15432:5432 postgres:16-alpine`).
+Use-case tests inject fakes for `SessionCache`/`ConfigStore` and real crypto + file/sqlite repositories (see the `makeTestbed` helper in `tests/vault.test.ts`). Infrastructure reads env vars lazily — `KEY_VAULT_PATH`, `KEY_SESSION_PATH`, `KEY_SESSION_TTL`, `KEY_MIN_PASSWORD_LENGTH`, `XDG_CONFIG_HOME` — set them in `beforeEach`, delete in `afterEach` (existing suites show the pattern). Postgres/MySQL have no automated integration tests; verify manually against a container (`podman run --rm -e POSTGRES_PASSWORD=test -p 15432:5432 postgres:16-alpine`).
 
 The TUI has no automated tests. Verify it in a tmux harness:
 
@@ -54,8 +55,8 @@ The published TermUI packages have bugs this code works around. Violating these 
 
 - The layout engine does not measure content: every `box`/`text` needs explicit `width` and `height`; `flexGrow`/auto collapse to 0 and the subtree vanishes.
 - Colors outside the named palette (e.g. `gray`) abort the entire render pass. Stick to basics (`cyan`, `white`, `red`, `yellow`, `green`).
-- `useTerminalSize()` returns 0×0 — use `tui/useTermSize.ts` instead.
-- Don't use the framework's `TextInput`/`PasswordInput` widgets: they are focusable, and the App's FocusManager then routes all keys to them (swallowing Tab/Enter). Forms use the hand-rolled `Field` + `editValue` in `tui/inputs.tsx`, with the parent owning focus.
+- `useTerminalSize()` returns 0×0 — use `presentation/tui/useTermSize.ts` instead.
+- Don't use the framework's `TextInput`/`PasswordInput` widgets: they are focusable, and the App's FocusManager then routes all keys to them (swallowing Tab/Enter). Forms use the hand-rolled `Field` + `editValue` in `presentation/tui/inputs.tsx`, with the parent owning focus.
 - `useInput`/`useKeymap` handlers can retain closures from old renders: read state via `useTuiStore.getState()` or refs inside handlers, never from captured variables; use functional `setState` updates.
 - Every `.tsx` file needs the `/** @jsxImportSource @termuijs/jsx */` pragma — Bun only reads `tsconfig.json` from the cwd, and `key` runs from arbitrary directories.
 - Keymaps are mode-scoped by mounting: `BrowseKeymap` etc. only exist while their mode is active, so single-letter bindings don't capture form typing. Keep that pattern when adding modes.

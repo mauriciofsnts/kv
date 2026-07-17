@@ -1,65 +1,55 @@
 import { describe, expect, test } from 'bun:test'
-import {
-  SCRYPT_PARAMS,
-  WrongPasswordError,
-  decrypt,
-  deriveKey,
-  encrypt,
-  newSalt,
-} from '../src/core/crypto.ts'
-
-function kdfFor(salt: Buffer) {
-  return { algo: 'scrypt' as const, salt: salt.toString('base64'), ...SCRYPT_PARAMS }
-}
+import { WrongPasswordError } from '../src/domain/errors.ts'
+import { nodeCrypto } from '../src/infrastructure/crypto/node-crypto.ts'
 
 describe('crypto', () => {
   test('encrypt/decrypt roundtrip', () => {
-    const salt = newSalt()
-    const key = deriveKey('secret-password', salt)
-    const envelope = encrypt('{"hello":"world"}', key, kdfFor(salt))
-    expect(decrypt(envelope, key)).toBe('{"hello":"world"}')
+    const kdf = nodeCrypto.newKdfParams()
+    const key = nodeCrypto.deriveKey('secret-password', kdf)
+    const envelope = nodeCrypto.encrypt('{"hello":"world"}', key, kdf)
+    expect(nodeCrypto.decrypt(envelope, key)).toBe('{"hello":"world"}')
   })
 
   test('wrong password fails GCM authentication', () => {
-    const salt = newSalt()
-    const key = deriveKey('right-password', salt)
-    const envelope = encrypt('data', key, kdfFor(salt))
-    const wrongKey = deriveKey('wrong-password', salt)
-    expect(() => decrypt(envelope, wrongKey)).toThrow(WrongPasswordError)
+    const kdf = nodeCrypto.newKdfParams()
+    const key = nodeCrypto.deriveKey('right-password', kdf)
+    const envelope = nodeCrypto.encrypt('data', key, kdf)
+    const wrongKey = nodeCrypto.deriveKey('wrong-password', kdf)
+    expect(() => nodeCrypto.decrypt(envelope, wrongKey)).toThrow(WrongPasswordError)
   })
 
   test('tampered payload fails authentication', () => {
-    const salt = newSalt()
-    const key = deriveKey('password', salt)
-    const envelope = encrypt('original data', key, kdfFor(salt))
+    const kdf = nodeCrypto.newKdfParams()
+    const key = nodeCrypto.deriveKey('password', kdf)
+    const envelope = nodeCrypto.encrypt('original data', key, kdf)
     const tampered = Buffer.from(envelope.data, 'base64')
     tampered[0] = tampered[0]! ^ 0xff
     envelope.data = tampered.toString('base64')
-    expect(() => decrypt(envelope, key)).toThrow(WrongPasswordError)
+    expect(() => nodeCrypto.decrypt(envelope, key)).toThrow(WrongPasswordError)
   })
 
   test('fresh IV on every encrypt', () => {
-    const salt = newSalt()
-    const key = deriveKey('password', salt)
-    const a = encrypt('x', key, kdfFor(salt))
-    const b = encrypt('x', key, kdfFor(salt))
+    const kdf = nodeCrypto.newKdfParams()
+    const key = nodeCrypto.deriveKey('password', kdf)
+    const a = nodeCrypto.encrypt('x', key, kdf)
+    const b = nodeCrypto.encrypt('x', key, kdf)
     expect(a.cipher.iv).not.toBe(b.cipher.iv)
     expect(a.data).not.toBe(b.data)
   })
 
-  test('same password + same salt = same key; different salts differ', () => {
-    const salt = newSalt()
-    const k1 = deriveKey('password', salt)
-    const k2 = deriveKey('password', salt)
-    const k3 = deriveKey('password', newSalt())
+  test('same password + same kdf = same key; different salts differ', () => {
+    const kdf = nodeCrypto.newKdfParams()
+    const k1 = nodeCrypto.deriveKey('password', kdf)
+    const k2 = nodeCrypto.deriveKey('password', kdf)
+    const k3 = nodeCrypto.deriveKey('password', nodeCrypto.newKdfParams())
     expect(k1.equals(k2)).toBe(true)
     expect(k1.equals(k3)).toBe(false)
   })
 
   test('unicode content survives the roundtrip', () => {
-    const salt = newSalt()
-    const key = deriveKey('password', salt)
+    const kdf = nodeCrypto.newKdfParams()
+    const key = nodeCrypto.deriveKey('password', kdf)
     const text = 'código—ção 🔐 \n multi\nline'
-    expect(decrypt(encrypt(text, key, kdfFor(salt)), key)).toBe(text)
+    expect(nodeCrypto.decrypt(nodeCrypto.encrypt(text, key, kdf), key)).toBe(text)
   })
 })

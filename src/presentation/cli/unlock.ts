@@ -1,13 +1,9 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { WrongPasswordError } from '../core/crypto.ts'
-import { loadSessionKey, storeSessionKey } from '../core/session.ts'
-import {
-  DEFAULT_GROUP,
-  type Vault,
-  openVaultWithKey,
-  openVaultWithPassword,
-} from '../core/vault.ts'
+import type { Vault } from '../../application/vault.ts'
+import { vaultAccess } from '../../composition.ts'
+import { DEFAULT_GROUP } from '../../domain/secret.ts'
+import { WrongPasswordError } from '../../domain/errors.ts'
 import { hiddenPrompt } from './prompt.ts'
 
 const MAX_ATTEMPTS = 3
@@ -15,21 +11,19 @@ const MAX_ATTEMPTS = 3
 // Opens the vault via the active session or by asking for the password
 // (up to 3 attempts).
 export async function unlockVault(): Promise<Vault> {
-  const sessionKey = loadSessionKey()
-  if (sessionKey) {
-    try {
-      return await openVaultWithKey(sessionKey)
-    } catch (err) {
-      // Session from an older vault (e.g. password changed): ignore and ask.
-      if (!(err instanceof WrongPasswordError)) throw err
-    }
+  try {
+    const fromSession = await vaultAccess.openWithSession()
+    if (fromSession) return fromSession
+  } catch (err) {
+    // Session from an older vault (e.g. password changed): ignore and ask.
+    if (!(err instanceof WrongPasswordError)) throw err
   }
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     const password = await hiddenPrompt('Vault password: ')
     try {
-      const vault = await openVaultWithPassword(password)
-      const { volatile } = storeSessionKey(vault.key)
+      const vault = await vaultAccess.openWithPassword(password)
+      const { volatile } = vaultAccess.startSession(vault)
       if (!volatile) {
         process.stderr.write(
           'warning: XDG_RUNTIME_DIR unavailable; session stored at ~/.cache/key/session (disk).\n',

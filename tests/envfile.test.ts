@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { appendEnvVar, listEnvVars, quoteValue, setEnvValue } from '../src/core/envfile.ts'
+import { appendEnvVar, listEnvVars, quoteValue, setEnvValue } from '../src/domain/env-file.ts'
 
 describe('listEnvVars', () => {
   test('lists variables ignoring comments and blank lines', () => {

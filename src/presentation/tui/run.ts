@@ -1,10 +1,9 @@
-import { WrongPasswordError } from '../core/crypto.ts'
-import { loadSessionKey } from '../core/session.ts'
-import { openVaultWithKey, vaultExists } from '../core/vault.ts'
+import { vaultAccess } from '../../composition.ts'
+import { WrongPasswordError } from '../../domain/errors.ts'
 import { useTuiStore } from './store.ts'
 
 export async function runTui(): Promise<void> {
-  if (!(await vaultExists())) {
+  if (!(await vaultAccess.exists())) {
     console.error('No vault found. Run `key init` first.')
     process.exit(1)
   }
@@ -14,14 +13,11 @@ export async function runTui(): Promise<void> {
   }
 
   // An active session skips the password screen.
-  const sessionKey = loadSessionKey()
-  if (sessionKey) {
-    try {
-      const vault = await openVaultWithKey(sessionKey)
-      useTuiStore.setState({ vault, mode: 'browse' })
-    } catch (err) {
-      if (!(err instanceof WrongPasswordError)) throw err
-    }
+  try {
+    const vault = await vaultAccess.openWithSession()
+    if (vault) useTuiStore.setState({ vault, mode: 'browse' })
+  } catch (err) {
+    if (!(err instanceof WrongPasswordError)) throw err
   }
 
   // Late import: only bring up the JSX runtime when the TUI is actually used.

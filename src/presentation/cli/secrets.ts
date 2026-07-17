@@ -1,19 +1,11 @@
-import { minPasswordLength } from '../core/paths.ts'
-import { clearSession } from '../core/session.ts'
+import { config, manageSecrets, vaultAccess } from '../../composition.ts'
 import {
-  NAME_PATTERN,
-  addAliases,
   getSecret,
   listGroups,
   listSecrets,
   ownerOfName,
-  rekeyVault,
-  removeAliases,
-  removeSecret,
   resolveSecret,
-  saveVault,
-  setSecret,
-} from '../core/vault.ts'
+} from '../../domain/secret.ts'
 import { confirmPrompt, hiddenPrompt } from './prompt.ts'
 import { resolveGroup, unlockVault } from './unlock.ts'
 
@@ -24,7 +16,7 @@ export async function cmdSet(name: string | undefined, groupFlag?: string): Prom
   }
   const vault = await unlockVault()
   const group = resolveGroup(groupFlag)
-  const owner = ownerOfName(vault, group, name)
+  const owner = ownerOfName(vault.data, group, name)
   if (owner && owner !== name) {
     console.error(`"${name}" is already an alias of "${owner}" in group "${group}".`)
     process.exit(1)
@@ -32,8 +24,7 @@ export async function cmdSet(name: string | undefined, groupFlag?: string): Prom
   // Value via hidden prompt: passing it through argv would leak into shell
   // history and ps output.
   const value = await hiddenPrompt(`Value for ${name}: `)
-  setSecret(vault, group, name, value)
-  await saveVault(vault)
+  await manageSecrets.saveSecret(vault, group, { name, value })
   console.log(`✓ ${name} saved to group "${group}".`)
 }
 
@@ -44,7 +35,7 @@ export async function cmdGet(name: string | undefined, groupFlag?: string): Prom
   }
   const vault = await unlockVault()
   const group = resolveGroup(groupFlag)
-  const resolved = resolveSecret(vault, group, name)
+  const resolved = resolveSecret(vault.data, group, name)
   if (!resolved) {
     console.error(`"${name}" does not exist in group "${group}".`)
     process.exit(1)
@@ -55,7 +46,7 @@ export async function cmdGet(name: string | undefined, groupFlag?: string): Prom
 export async function cmdList(groupFlag?: string): Promise<void> {
   const vault = await unlockVault()
   const printGroup = (group: string, indent: string) => {
-    for (const [name, secret] of listSecrets(vault, group)) {
+    for (const [name, secret] of listSecrets(vault.data, group)) {
       const aliases = secret.aliases?.length ? `  (aliases: ${secret.aliases.join(', ')})` : ''
       console.log(`${indent}${name}${aliases}`)
     }
@@ -64,8 +55,8 @@ export async function cmdList(groupFlag?: string): Promise<void> {
     printGroup(groupFlag, '')
     return
   }
-  for (const group of listGroups(vault)) {
-    console.log(`${group} (${listSecrets(vault, group).length})`)
+  for (const group of listGroups(vault.data)) {
+    console.log(`${group} (${listSecrets(vault.data, group).length})`)
     printGroup(group, '  ')
   }
 }
@@ -77,7 +68,7 @@ export async function cmdRm(name: string | undefined, groupFlag?: string): Promi
   }
   const vault = await unlockVault()
   const group = resolveGroup(groupFlag)
-  if (!getSecret(vault, group, name)) {
+  if (!getSecret(vault.data, group, name)) {
     console.error(`"${name}" does not exist in group "${group}".`)
     process.exit(1)
   }
@@ -85,8 +76,7 @@ export async function cmdRm(name: string | undefined, groupFlag?: string): Promi
     console.log('Nothing changed.')
     return
   }
-  removeSecret(vault, group, name)
-  await saveVault(vault)
+  await manageSecrets.deleteSecret(vault, group, name)
   console.log(`✓ ${name} removed.`)
 }
 
@@ -110,18 +100,8 @@ export async function cmdAlias(args: string[], groupFlag?: string): Promise<void
       console.error(usage)
       process.exit(1)
     }
-    if (!getSecret(vault, group, name)) {
-      console.error(`"${name}" does not exist in group "${group}".`)
-      process.exit(1)
-    }
     if (first === 'add') {
-      const invalid = aliases.filter((a) => !NAME_PATTERN.test(a))
-      if (invalid.length > 0) {
-        console.error(`Invalid alias name(s): ${invalid.join(', ')}`)
-        process.exit(1)
-      }
-      const { added, conflicts } = addAliases(vault, group, name, aliases)
-      if (added.length > 0) await saveVault(vault)
+      const { added, conflicts } = await manageSecrets.addAliases(vault, group, name, aliases)
       if (added.length > 0) console.log(`✓ ${added.join(', ')} → ${name} [group: ${group}]`)
       for (const { alias, owner } of conflicts) {
         console.error(`✗ "${alias}" is already taken by "${owner}".`)
@@ -129,17 +109,16 @@ export async function cmdAlias(args: string[], groupFlag?: string): Promise<void
       if (conflicts.length > 0 && added.length === 0) process.exit(1)
       return
     }
-    const removed = removeAliases(vault, group, name, aliases)
+    const removed = await manageSecrets.removeAliases(vault, group, name, aliases)
     if (removed.length === 0) {
       console.error(`No matching aliases on "${name}".`)
       process.exit(1)
     }
-    await saveVault(vault)
     console.log(`✓ removed ${removed.join(', ')} from ${name} [group: ${group}]`)
     return
   }
 
-  const secret = getSecret(vault, group, first)
+  const secret = getSecret(vault.data, group, first)
   if (!secret) {
     console.error(`"${first}" does not exist in group "${group}".`)
     process.exit(1)
@@ -149,10 +128,11 @@ export async function cmdAlias(args: string[], groupFlag?: string): Promise<void
 
 export async function cmdPasswd(): Promise<void> {
   const vault = await unlockVault()
-  const minLength = minPasswordLength()
   const password = await hiddenPrompt('New password: ')
-  if (password.length < minLength) {
-    console.error(`Password must be at least ${minLength} characters (KEY_MIN_PASSWORD_LENGTH).`)
+  if (password.length < config.minPasswordLength()) {
+    console.error(
+      `Password must be at least ${config.minPasswordLength()} characters (KEY_MIN_PASSWORD_LENGTH).`,
+    )
     process.exit(1)
   }
   const confirmation = await hiddenPrompt('Confirm new password: ')
@@ -160,7 +140,6 @@ export async function cmdPasswd(): Promise<void> {
     console.error('Passwords do not match.')
     process.exit(1)
   }
-  await rekeyVault(vault, password)
-  clearSession()
+  await vaultAccess.changePassword(vault, password)
   console.log('✓ Password changed. Session cleared; the next operation will ask for the new password.')
 }
