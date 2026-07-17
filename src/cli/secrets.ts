@@ -33,7 +33,7 @@ export async function cmdSet(name: string | undefined, groupFlag?: string): Prom
   // history and ps output.
   const value = await hiddenPrompt(`Value for ${name}: `)
   setSecret(vault, group, name, value)
-  saveVault(vault)
+  await saveVault(vault)
   console.log(`✓ ${name} saved to group "${group}".`)
 }
 
@@ -86,7 +86,7 @@ export async function cmdRm(name: string | undefined, groupFlag?: string): Promi
     return
   }
   removeSecret(vault, group, name)
-  saveVault(vault)
+  await saveVault(vault)
   console.log(`✓ ${name} removed.`)
 }
 
@@ -121,7 +121,7 @@ export async function cmdAlias(args: string[], groupFlag?: string): Promise<void
         process.exit(1)
       }
       const { added, conflicts } = addAliases(vault, group, name, aliases)
-      if (added.length > 0) saveVault(vault)
+      if (added.length > 0) await saveVault(vault)
       if (added.length > 0) console.log(`✓ ${added.join(', ')} → ${name} [group: ${group}]`)
       for (const { alias, owner } of conflicts) {
         console.error(`✗ "${alias}" is already taken by "${owner}".`)
@@ -134,7 +134,7 @@ export async function cmdAlias(args: string[], groupFlag?: string): Promise<void
       console.error(`No matching aliases on "${name}".`)
       process.exit(1)
     }
-    saveVault(vault)
+    await saveVault(vault)
     console.log(`✓ removed ${removed.join(', ')} from ${name} [group: ${group}]`)
     return
   }
@@ -160,7 +160,7 @@ export async function cmdPasswd(): Promise<void> {
     console.error('Passwords do not match.')
     process.exit(1)
   }
-  rekeyVault(vault, password)
+  await rekeyVault(vault, password)
   clearSession()
   console.log('✓ Password changed. Session cleared; the next operation will ask for the new password.')
 }

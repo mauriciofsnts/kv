@@ -31,6 +31,9 @@ key alias rm DATABASE_URL POSTGRES_URL           # remove aliases
 key alias DATABASE_URL          # list a secret's aliases
 key lock                        # end the session (ask for the password again)
 key passwd                      # change the password (re-encrypts the vault)
+key vault                       # show where the vault is stored
+key vault sqlite://~/.local/share/key/vault.db      # move the vault to SQLite
+key vault postgres://user:pass@host:5432/db         # ...or to Postgres
 ```
 
 ### Aliases
@@ -45,6 +48,21 @@ key get DB_URL   # also resolves through the alias
 ```
 
 Aliases are unique within a group: an alias can't collide with another secret's name or aliases. In the TUI, the add/edit form has an **Aliases** field (comma-separated) and the list shows a `+N` badge next to names that have aliases.
+
+### Vault storage (file or database)
+
+By default the vault is a local file (`~/.config/key/vault.enc`), but it can live in a database instead — useful for backups or sharing one vault across machines:
+
+```bash
+key vault                                        # show current location/backend
+key vault sqlite:///home/me/vaults/key.db        # local SQLite database
+key vault postgres://user:pass@host:5432/mydb    # Postgres (also mysql:// / mariadb://)
+```
+
+- The location is a **file path** or a **database URL** (`sqlite://`, `postgres://`, `postgresql://`, `mysql://`, `mariadb://`), stored in `~/.config/key/config.json`; `KEY_VAULT_PATH` overrides it (same syntax).
+- When switching, `key vault` offers to **copy the existing vault** to the new location — no password needed, since only ciphertext moves.
+- The database only ever stores the **encrypted envelope** (a single row in a `key_vault` table); encryption/decryption always happens locally, and the previous version is kept in a `previous` column (the file backend keeps a `.bak`).
+- Database drivers are Bun built-ins (`Bun.SQL`) — no extra dependencies.
 
 ### Groups
 
@@ -91,7 +109,7 @@ Environment variables:
 
 | Variable | Meaning | Default |
 |---|---|---|
-| `KEY_VAULT_PATH` | Vault path | `~/.config/key/vault.enc` |
+| `KEY_VAULT_PATH` | Vault location: file path or database URL (overrides `key vault` config) | `~/.config/key/vault.enc` |
 | `KEY_SESSION_TTL` | Session TTL in seconds | `900` |
 | `KEY_MIN_PASSWORD_LENGTH` | Minimum vault password length (enforced by `init` and `passwd`) | `8` |
 | `KEY_SESSION_PATH` | Session cache path (useful in tests) | `$XDG_RUNTIME_DIR/key/session` |

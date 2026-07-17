@@ -3,6 +3,7 @@ import { parseArgs } from 'node:util'
 import { cmdApply } from './cli/apply.ts'
 import { cmdInit } from './cli/init.ts'
 import { cmdAlias, cmdGet, cmdList, cmdPasswd, cmdRm, cmdSet } from './cli/secrets.ts'
+import { cmdVault } from './cli/vaultcmd.ts'
 import { WrongPasswordError } from './core/crypto.ts'
 import { clearSession } from './core/session.ts'
 import { VaultExistsError, VaultNotFoundError } from './core/vault.ts'
@@ -22,6 +23,9 @@ Usage:
   key alias rm NAME A...    Remove aliases
   key lock                  End the session (ask for the password again)
   key passwd                Change the vault password
+  key vault [location]      Show or change where the vault is stored:
+                            a file path or a database URL
+                            (sqlite://, postgres://, mysql://, mariadb://)
 
 Options:
   --group, -g <group>       Vault group (default: .key file in the directory, else "default")
@@ -29,7 +33,9 @@ Options:
   --help, -h                Show this help
 
 Environment variables:
-  KEY_VAULT_PATH            Vault path (default: ~/.config/key/vault.enc)
+  KEY_VAULT_PATH            Vault location: file path or database URL
+                            (default: ~/.config/key/vault.enc; also settable
+                            via \`key vault\`)
   KEY_SESSION_TTL           Session TTL in seconds (default: 900)
   KEY_MIN_PASSWORD_LENGTH   Minimum vault password length (default: 8)
 `
@@ -78,6 +84,9 @@ async function main(): Promise<void> {
       break
     case 'alias':
       await cmdAlias(positionals.slice(1), values.group)
+      break
+    case 'vault':
+      await cmdVault(arg)
       break
     case 'lock':
       clearSession()

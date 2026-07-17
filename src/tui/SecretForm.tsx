@@ -95,7 +95,10 @@ export function SecretForm({
       removeSecret(vault, group, initialName)
     }
     setSecret(vault, group, trimmed, currentValue, currentNote.trim() || undefined, aliases)
-    saveVault(vault)
+    // Persistence may hit a database; report failures instead of crashing.
+    saveVault(vault).catch((err: unknown) =>
+      setStatus(`✗ save failed: ${err instanceof Error ? err.message : String(err)}`),
+    )
     setStatus(`✓ ${trimmed} saved to group "${group}"`)
     setMode('browse')
   }

@@ -18,7 +18,7 @@ export async function unlockVault(): Promise<Vault> {
   const sessionKey = loadSessionKey()
   if (sessionKey) {
     try {
-      return openVaultWithKey(sessionKey)
+      return await openVaultWithKey(sessionKey)
     } catch (err) {
       // Session from an older vault (e.g. password changed): ignore and ask.
       if (!(err instanceof WrongPasswordError)) throw err
@@ -28,7 +28,7 @@ export async function unlockVault(): Promise<Vault> {
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     const password = await hiddenPrompt('Vault password: ')
     try {
-      const vault = openVaultWithPassword(password)
+      const vault = await openVaultWithPassword(password)
       const { volatile } = storeSessionKey(vault.key)
       if (!volatile) {
         process.stderr.write(

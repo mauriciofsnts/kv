@@ -4,7 +4,7 @@ import { openVaultWithKey, vaultExists } from '../core/vault.ts'
 import { useTuiStore } from './store.ts'
 
 export async function runTui(): Promise<void> {
-  if (!vaultExists()) {
+  if (!(await vaultExists())) {
     console.error('No vault found. Run `key init` first.')
     process.exit(1)
   }
@@ -17,7 +17,7 @@ export async function runTui(): Promise<void> {
   const sessionKey = loadSessionKey()
   if (sessionKey) {
     try {
-      const vault = openVaultWithKey(sessionKey)
+      const vault = await openVaultWithKey(sessionKey)
       useTuiStore.setState({ vault, mode: 'browse' })
     } catch (err) {
       if (!(err instanceof WrongPasswordError)) throw err
