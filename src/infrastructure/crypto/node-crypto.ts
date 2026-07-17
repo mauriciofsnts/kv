@@ -43,6 +43,10 @@ export const nodeCrypto: CryptoProvider = {
     }
   },
 
+  randomBytes(length: number): Buffer {
+    return randomBytes(length)
+  },
+
   decrypt(envelope: EncryptedEnvelope, key: Buffer): string {
     const decipher = createDecipheriv(
       'aes-256-gcm',

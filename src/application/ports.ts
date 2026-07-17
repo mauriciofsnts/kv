@@ -22,6 +22,7 @@ export interface CryptoProvider {
   encrypt(plaintext: string, key: Buffer, kdf: KdfParams): EncryptedEnvelope
   // Throws WrongPasswordError when authentication fails.
   decrypt(envelope: EncryptedEnvelope, key: Buffer): string
+  randomBytes(length: number): Buffer
 }
 
 // Where the encrypted envelope lives (file, database row, ...). Backends
