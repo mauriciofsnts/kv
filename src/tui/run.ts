@@ -5,15 +5,15 @@ import { useTuiStore } from './store.ts'
 
 export async function runTui(): Promise<void> {
   if (!vaultExists()) {
-    console.error('Nenhum cofre encontrado. Rode `key init` primeiro.')
+    console.error('No vault found. Run `key init` first.')
     process.exit(1)
   }
   if (!process.stdout.isTTY) {
-    console.error('O TUI precisa de um terminal interativo. Use os subcomandos (key --help).')
+    console.error('The TUI needs an interactive terminal. Use the subcommands (key --help).')
     process.exit(1)
   }
 
-  // Sessão ativa pula a tela de senha.
+  // An active session skips the password screen.
   const sessionKey = loadSessionKey()
   if (sessionKey) {
     try {
@@ -24,7 +24,7 @@ export async function runTui(): Promise<void> {
     }
   }
 
-  // Import tardio: subir o runtime JSX só quando o TUI é realmente usado.
+  // Late import: only bring up the JSX runtime when the TUI is actually used.
   const { render } = await import('@termuijs/jsx')
   const { jsx } = await import('@termuijs/jsx/jsx-runtime')
   const { App } = await import('./App.tsx')

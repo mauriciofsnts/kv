@@ -1,93 +1,116 @@
 # key
 
-Gerenciador de envs criptografadas com TUI, estilo [sops](https://github.com/getsops/sops): apenas quem tem a senha descriptografa. O diferencial é o `key apply`, que preenche os valores reais direto no `.env` do projeto.
+Encrypted .env manager with a TUI, in the spirit of [sops](https://github.com/getsops/sops): only whoever has the password can decrypt. The differentiator is `key apply`, which fills real values straight into the project's `.env`.
 
 ```
-POSTGRES_DB=placeholder      →  key apply POSTGRES_DB  →  POSTGRES_DB=valor_real
+POSTGRES_DB=placeholder      →  key apply POSTGRES_DB  →  POSTGRES_DB=real_value
 ```
 
-## Instalação
+## Install
 
-Requer [Bun](https://bun.sh) ≥ 1.3.
+Requires [Bun](https://bun.sh) ≥ 1.3.
 
 ```bash
 bun install
-bun link   # disponibiliza o comando `key` no PATH
+bun link   # puts the `key` command on your PATH
 ```
 
-## Uso
+## Usage
 
 ```bash
-key init                  # cria o cofre (~/.config/key/vault.enc)
-key                       # abre o TUI
-key set POSTGRES_DB       # grava uma secret (valor via prompt oculto)
-key apply POSTGRES_DB     # substitui o valor no ./.env
-key apply all             # aplica tudo que existir no cofre
-key get POSTGRES_DB       # imprime o valor (bom para pipes)
-key list                  # lista grupos e nomes (nunca valores)
-key rm POSTGRES_DB        # remove com confirmação
-key lock                  # encerra a sessão (volta a pedir senha)
-key passwd                # troca a senha (re-criptografa o cofre)
+key init                        # create the vault (~/.config/key/vault.enc)
+key                             # open the TUI
+key set POSTGRES_DB             # store a secret (value via hidden prompt)
+key apply POSTGRES_DB           # replace the value in ./.env
+key apply all                   # apply everything the vault knows about
+key get POSTGRES_DB             # print the value (pipe-friendly)
+key list                        # list groups and names (never values)
+key rm POSTGRES_DB              # remove with confirmation
+key alias add DATABASE_URL DB_URL POSTGRES_URL   # alternative names, same value
+key alias rm DATABASE_URL POSTGRES_URL           # remove aliases
+key alias DATABASE_URL          # list a secret's aliases
+key lock                        # end the session (ask for the password again)
+key passwd                      # change the password (re-encrypts the vault)
 ```
 
-### Grupos
+### Aliases
 
-As secrets vivem em grupos dentro do cofre (`default` se nada for dito). A resolução do grupo no `apply`/`set`/`get` segue esta ordem:
+A secret can have alternative names that resolve to the same value — handy when different projects call the same thing `DB_URL`, `POSTGRES_URL` or `DATABASE_URL`:
 
-1. Flag `--group`/`-g`
-2. Arquivo `.key` no diretório do projeto contendo o nome do grupo
+```bash
+key set DATABASE_URL
+key alias add DATABASE_URL DB_URL POSTGRES_URL
+key apply all    # fills DATABASE_URL, DB_URL and POSTGRES_URL, all with the same value
+key get DB_URL   # also resolves through the alias
+```
+
+Aliases are unique within a group: an alias can't collide with another secret's name or aliases. In the TUI, the add/edit form has an **Aliases** field (comma-separated) and the list shows a `+N` badge next to names that have aliases.
+
+### Groups
+
+Secrets live in groups inside the vault (`default` if unspecified). Group resolution for `apply`/`set`/`get` follows this order:
+
+1. `--group`/`-g` flag
+2. A `.key` file in the project directory containing the group name
 3. `default`
 
 ```bash
-echo "meu-projeto" > .key   # todo `key apply` neste diretório usa o grupo meu-projeto
+echo "my-project" > .key   # every `key apply` in this directory uses the my-project group
 ```
 
 ### apply
 
-- Edita o `.env` **in-place**, preservando comentários, ordem das linhas, prefixo `export` e CRLF.
-- Valores com espaços/`#`/aspas ganham aspas duplas automaticamente.
-- `key apply VAR` com variável ausente no `.env` pergunta antes de acrescentar no final.
-- `key apply all` mostra um resumo: `✓ 4 aplicadas · − 2 sem valor no cofre (...)`.
-- `--env arquivo` aponta para outro arquivo (padrão `./.env`).
+- Edits the `.env` **in-place**, preserving comments, line order, `export` prefix and CRLF.
+- Values with spaces/`#`/quotes get double quotes automatically.
+- `key apply VAR` with a variable missing from the `.env` asks before appending it at the end.
+- `key apply all` prints a summary: `✓ 4 applied · − 2 missing from vault (...)`.
+- `--env file` targets another file (default `./.env`).
 
 ### TUI
 
-`key` sem argumentos abre o painel. Teclas:
+`key` with no arguments opens the panel. Keys:
 
-| Tecla | Ação |
+| Key | Action |
 |---|---|
-| `↑↓` / `jk` | Navega nas secrets |
-| `←→` | Troca de grupo |
-| `a` / `e` / `d` | Adiciona / edita / remove (com confirmação) |
-| `v` | Revela/mascara o valor selecionado |
-| `/` | Busca por nome |
-| `g` | Cria grupo |
-| `q` | Sai |
+| `↑↓` / `jk` | Move through secrets |
+| `←→` | Switch group |
+| `a` / `e` / `d` | Add / edit / delete (with confirmation) |
+| `v` | Reveal/mask the selected value |
+| `/` | Search by name or alias |
+| `g` | Create group |
+| `q` | Quit |
 
-## Modelo de segurança
+## Security model
 
-- **Cofre**: arquivo único `~/.config/key/vault.enc`. O payload é JSON criptografado com **AES-256-GCM**; a chave vem da senha via **scrypt** (N=2¹⁵, r=8, p=1, salt aleatório). Senha errada ou arquivo adulterado falham na autenticação GCM.
-- **Sessão**: após desbloquear, a **chave derivada** (nunca a senha) fica em `$XDG_RUNTIME_DIR/key/session` (tmpfs, some no reboot, `0600`) por 15 minutos (configurável: `KEY_SESSION_TTL`, em segundos), renovados a cada uso. `key lock` apaga na hora. Sem `XDG_RUNTIME_DIR`, cai para `~/.cache/key/session` com aviso (disco).
-- **Escrita atômica**: o cofre é salvo via `.tmp` + rename, mantendo a versão anterior em `vault.enc.bak`.
-- Valores nunca passam por argv (`key set` lê via prompt oculto) e o `apply` só imprime nomes, nunca valores.
+- **Vault**: a single file, `~/.config/key/vault.enc`. The payload is JSON encrypted with **AES-256-GCM**; the key is derived from the password via **scrypt** (N=2¹⁵, r=8, p=1, random salt). A wrong password or a tampered file fails GCM authentication.
+- **Session**: after unlocking, the **derived key** (never the password) lives in `$XDG_RUNTIME_DIR/key/session` (tmpfs, gone on reboot, `0600`) for 15 minutes (configurable via `KEY_SESSION_TTL`, in seconds), renewed on each use. `key lock` deletes it immediately. Without `XDG_RUNTIME_DIR` it falls back to `~/.cache/key/session` (disk) with a warning.
+- **Atomic writes**: the vault is saved via `.tmp` + rename, keeping the previous version as `vault.enc.bak`.
+- Values never travel through argv (`key set` reads via hidden prompt) and `apply` only prints names, never values.
 
-Variáveis de ambiente: `KEY_VAULT_PATH` (caminho do cofre), `KEY_SESSION_TTL` (TTL em segundos), `KEY_SESSION_PATH` (caminho do cache de sessão, útil em testes).
+Environment variables:
 
-## Desenvolvimento
+| Variable | Meaning | Default |
+|---|---|---|
+| `KEY_VAULT_PATH` | Vault path | `~/.config/key/vault.enc` |
+| `KEY_SESSION_TTL` | Session TTL in seconds | `900` |
+| `KEY_MIN_PASSWORD_LENGTH` | Minimum vault password length (enforced by `init` and `passwd`) | `8` |
+| `KEY_SESSION_PATH` | Session cache path (useful in tests) | `$XDG_RUNTIME_DIR/key/session` |
+
+## Development
 
 ```bash
-bun test            # crypto, vault, sessão, parser de .env
+bun test            # crypto, vault, session, .env parser
 bun run typecheck   # tsc --noEmit
 ```
 
-Stack: [TermUI](https://www.termui.io) (`@termuijs/*` 0.1.7) para o TUI; o core (crypto/vault/apply) usa só built-ins do Node/Bun.
+Stack: [TermUI](https://www.termui.io) (`@termuijs/*` 0.1.7) for the TUI; the core (crypto/vault/apply) uses only Node/Bun built-ins.
 
-### Notas sobre o @termuijs 0.1.7
+### Notes on @termuijs 0.1.7
 
-O framework é novo e a versão publicada tem arestas que este código contorna (procure por comentários nos arquivos de `src/tui/`):
+The framework is young and the published version has rough edges this codebase works around (look for comments in `src/tui/`):
 
-- O layout não mede conteúdo: **todo** `box`/`text` precisa de `width`/`height` explícitos (flexGrow/auto viram 0 e o elemento some).
-- `useTerminalSize()` devolve 0×0 — usamos `src/tui/useTermSize.ts` no lugar.
-- Cores fora da paleta (ex.: `gray`) derrubam o render inteiro silenciosamente.
-- Os widgets `TextInput`/`PasswordInput` capturam o foco global e consomem Tab/Enter — os formulários usam campos próprios (`src/tui/inputs.tsx`).
-- Handlers de `useInput` podem reter closures de renders antigos — estado é lido via refs/`getState()` dentro dos handlers.
+- The layout engine doesn't measure content: **every** `box`/`text` needs explicit `width`/`height` (flexGrow/auto become 0 and the element vanishes).
+- `useTerminalSize()` returns 0×0 — we use `src/tui/useTermSize.ts` instead.
+- Colors outside the palette (e.g. `gray`) silently kill the whole render.
+- The `TextInput`/`PasswordInput` widgets grab global focus and swallow Tab/Enter — forms use hand-rolled fields (`src/tui/inputs.tsx`).
+- `useInput` handlers can retain closures from old renders — state is read via refs/`getState()` inside handlers.

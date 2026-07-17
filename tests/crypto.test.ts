@@ -13,53 +13,53 @@ function kdfFor(salt: Buffer) {
 }
 
 describe('crypto', () => {
-  test('roundtrip encrypt/decrypt', () => {
+  test('encrypt/decrypt roundtrip', () => {
     const salt = newSalt()
-    const key = deriveKey('senha-secreta', salt)
+    const key = deriveKey('secret-password', salt)
     const envelope = encrypt('{"hello":"world"}', key, kdfFor(salt))
     expect(decrypt(envelope, key)).toBe('{"hello":"world"}')
   })
 
-  test('senha errada falha na autenticação GCM', () => {
+  test('wrong password fails GCM authentication', () => {
     const salt = newSalt()
-    const key = deriveKey('senha-certa', salt)
-    const envelope = encrypt('dados', key, kdfFor(salt))
-    const wrongKey = deriveKey('senha-errada', salt)
+    const key = deriveKey('right-password', salt)
+    const envelope = encrypt('data', key, kdfFor(salt))
+    const wrongKey = deriveKey('wrong-password', salt)
     expect(() => decrypt(envelope, wrongKey)).toThrow(WrongPasswordError)
   })
 
-  test('payload adulterado falha na autenticação', () => {
+  test('tampered payload fails authentication', () => {
     const salt = newSalt()
-    const key = deriveKey('senha', salt)
-    const envelope = encrypt('dados originais', key, kdfFor(salt))
+    const key = deriveKey('password', salt)
+    const envelope = encrypt('original data', key, kdfFor(salt))
     const tampered = Buffer.from(envelope.data, 'base64')
     tampered[0] = tampered[0]! ^ 0xff
     envelope.data = tampered.toString('base64')
     expect(() => decrypt(envelope, key)).toThrow(WrongPasswordError)
   })
 
-  test('IVs diferentes a cada encrypt', () => {
+  test('fresh IV on every encrypt', () => {
     const salt = newSalt()
-    const key = deriveKey('senha', salt)
+    const key = deriveKey('password', salt)
     const a = encrypt('x', key, kdfFor(salt))
     const b = encrypt('x', key, kdfFor(salt))
     expect(a.cipher.iv).not.toBe(b.cipher.iv)
     expect(a.data).not.toBe(b.data)
   })
 
-  test('mesma senha + mesmo salt = mesma chave; salts diferentes = chaves diferentes', () => {
+  test('same password + same salt = same key; different salts differ', () => {
     const salt = newSalt()
-    const k1 = deriveKey('senha', salt)
-    const k2 = deriveKey('senha', salt)
-    const k3 = deriveKey('senha', newSalt())
+    const k1 = deriveKey('password', salt)
+    const k2 = deriveKey('password', salt)
+    const k3 = deriveKey('password', newSalt())
     expect(k1.equals(k2)).toBe(true)
     expect(k1.equals(k3)).toBe(false)
   })
 
-  test('conteúdo unicode sobrevive ao roundtrip', () => {
+  test('unicode content survives the roundtrip', () => {
     const salt = newSalt()
-    const key = deriveKey('senha', salt)
-    const text = 'código—ção 🔐 \n linhas\nmúltiplas'
+    const key = deriveKey('password', salt)
+    const text = 'código—ção 🔐 \n multi\nline'
     expect(decrypt(encrypt(text, key, kdfFor(salt)), key)).toBe(text)
   })
 })

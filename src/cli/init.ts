@@ -1,4 +1,4 @@
-import { vaultPath } from '../core/paths.ts'
+import { minPasswordLength, vaultPath } from '../core/paths.ts'
 import { storeSessionKey } from '../core/session.ts'
 import { createVault, vaultExists } from '../core/vault.ts'
 import { hiddenPrompt } from './prompt.ts'
@@ -6,21 +6,22 @@ import { hiddenPrompt } from './prompt.ts'
 export async function cmdInit(): Promise<void> {
   const path = vaultPath()
   if (vaultExists(path)) {
-    console.error(`Já existe um cofre em ${path}.`)
+    console.error(`A vault already exists at ${path}.`)
     process.exit(1)
   }
-  const password = await hiddenPrompt('Nova senha do cofre: ')
-  if (password.length < 8) {
-    console.error('A senha precisa ter pelo menos 8 caracteres.')
+  const minLength = minPasswordLength()
+  const password = await hiddenPrompt('New vault password: ')
+  if (password.length < minLength) {
+    console.error(`Password must be at least ${minLength} characters (KEY_MIN_PASSWORD_LENGTH).`)
     process.exit(1)
   }
-  const confirmation = await hiddenPrompt('Confirme a senha: ')
+  const confirmation = await hiddenPrompt('Confirm password: ')
   if (password !== confirmation) {
-    console.error('As senhas não conferem.')
+    console.error('Passwords do not match.')
     process.exit(1)
   }
   const vault = createVault(password, path)
   storeSessionKey(vault.key)
-  console.log(`Cofre criado em ${path}.`)
-  console.log('Use `key set NOME` para gravar secrets ou `key` para abrir o TUI.')
+  console.log(`Vault created at ${path}.`)
+  console.log('Use `key set NAME` to store secrets or `key` to open the TUI.')
 }

@@ -1,10 +1,10 @@
 /** @jsxImportSource @termuijs/jsx */
-// NOTA sobre dimensões: o layout do @termuijs 0.1.7 não mede conteúdo no
-// eixo principal (flexGrow/auto viram 0 e o widget some). Por isso todo
-// box/text daqui leva width/height explícitos, calculados de useTerminalSize.
+// NOTE on dimensions: the @termuijs 0.1.7 layout engine does not measure
+// content on the main axis (flexGrow/auto become 0 and the widget vanishes).
+// Every box/text here therefore carries explicit width/height, computed from
+// the terminal size.
 import type { KeyEvent } from '@termuijs/core'
 import { useInput, useKeymap, useRef, useState } from '@termuijs/jsx'
-import { useTermSize } from './useTermSize.ts'
 import {
   type Secret,
   listGroups,
@@ -14,6 +14,7 @@ import {
 } from '../core/vault.ts'
 import { SecretForm } from './SecretForm.tsx'
 import { useTuiStore } from './store.ts'
+import { useTermSize } from './useTermSize.ts'
 
 const MASK = '••••••••'
 const SIDEBAR_WIDTH = 24
@@ -23,7 +24,11 @@ const DATE_COL = 10
 function visibleSecrets(filter: string, secrets: [string, Secret][]): [string, Secret][] {
   if (!filter) return secrets
   const needle = filter.toLowerCase()
-  return secrets.filter(([name]) => name.toLowerCase().includes(needle))
+  return secrets.filter(
+    ([name, secret]) =>
+      name.toLowerCase().includes(needle) ||
+      secret.aliases?.some((a) => a.toLowerCase().includes(needle)),
+  )
 }
 
 export function Dashboard() {
@@ -70,6 +75,7 @@ function FormPanel({ width, height }: PanelProps) {
           initialName={name}
           initialValue={secret.value}
           initialNote={secret.note ?? ''}
+          initialAliases={secret.aliases ?? []}
         />
       )
     }
@@ -84,9 +90,9 @@ function GroupSidebar({ height }: PanelProps) {
   const innerWidth = SIDEBAR_WIDTH - 4
 
   return (
-    // "gray" não existe na paleta do core 0.1.7 e derruba o render inteiro
+    // "gray" is not in the core 0.1.7 palette and silently kills the render
     <box flexDirection="column" padding={1} border="round" borderColor="white" width={SIDEBAR_WIDTH} height={height}>
-      <text height={1} width={innerWidth} bold dim>Grupos ←/→</text>
+      <text height={1} width={innerWidth} bold dim>Groups ←/→</text>
       {groups.map((g) => (
         <text key={g} height={1} width={innerWidth} color={g === group ? 'cyan' : undefined} bold={g === group}>
           {g === group ? '▸ ' : '  '}{g}
@@ -107,7 +113,8 @@ function SecretList({ width, height }: PanelProps) {
   const secrets = vault ? visibleSecrets(filter, listSecrets(vault, group)) : []
   const innerWidth = width! - 4
   const valueCol = Math.max(10, innerWidth - NAME_COL - DATE_COL - 2)
-  // Janela de rolagem: mantém a seleção visível quando há mais linhas que espaço.
+  // Scroll window: keeps the selection visible when there are more rows
+  // than vertical space.
   const maxRows = Math.max(1, height - 5)
   const start = Math.max(0, Math.min(selected - maxRows + 1, secrets.length - maxRows))
   const windowed = secrets.slice(start, start + maxRows)
@@ -119,17 +126,18 @@ function SecretList({ width, height }: PanelProps) {
       </text>
       {secrets.length === 0 ? (
         <text height={1} width={innerWidth} dim>
-          {filter ? 'Nada encontrado.' : 'Vazio. Pressione "a" para adicionar.'}
+          {filter ? 'No matches.' : 'Empty. Press "a" to add.'}
         </text>
       ) : (
         windowed.map(([name, secret], offset) => {
           const index = start + offset
           const isSelected = index === selected
           const shown = revealed[name] ? secret.value : MASK
+          const aliasBadge = secret.aliases?.length ? ` +${secret.aliases.length}` : ''
           return (
             <box key={name} flexDirection="row" gap={1} height={1} width={innerWidth}>
               <text height={1} width={NAME_COL} color={isSelected ? 'cyan' : undefined} bold={isSelected}>
-                {isSelected ? '▸ ' : '  '}{name}
+                {isSelected ? '▸ ' : '  '}{name}{aliasBadge}
               </text>
               <text height={1} width={valueCol} dim={!revealed[name]}>{shown}</text>
               <text height={1} width={DATE_COL} dim>{secret.updatedAt.slice(0, 10)}</text>
@@ -145,10 +153,10 @@ function SecretList({ width, height }: PanelProps) {
   )
 }
 
-// Keymap do modo navegação. Vive num componente próprio para só estar
-// ativo quando o modo é "browse" (senão "a", "d" etc. capturariam a
-// digitação dos formulários). As actions leem tudo via getState(): os
-// handlers de teclado do 0.1.7 podem guardar closure de um render antigo.
+// Browse-mode keymap. Lives in its own component so it is only active in
+// "browse" mode (otherwise "a", "d" etc. would capture form typing). Actions
+// read everything via getState(): keyboard handlers in 0.1.7 can hold on to
+// closures from an old render.
 function BrowseKeymap({ count, names }: { count: number; names: string[] }) {
   const clampedSelect = (offset: number) => {
     if (count === 0) return
@@ -214,7 +222,7 @@ function FilterInput({ width }: { width: number }) {
     if (key.length === 1 && !event.ctrl && !event.alt) s.setFilter(s.filter + key)
   })
 
-  return <text height={1} width={width} color="yellow">busca: {filter}▏ (Enter mantém, Esc limpa)</text>
+  return <text height={1} width={width} color="yellow">search: {filter}▏ (Enter keeps, Esc clears)</text>
 }
 
 function ConfirmDelete({ width, names }: { width: number; names: string[] }) {
@@ -223,14 +231,14 @@ function ConfirmDelete({ width, names }: { width: number; names: string[] }) {
 
   useKeymap([
     {
-      key: 's',
+      key: 'y',
       action: () => {
         const s = useTuiStore.getState()
         const target = names[s.selected]
         if (s.vault && target) {
           removeSecret(s.vault, s.group, target)
           saveVault(s.vault)
-          s.setStatus(`✓ ${target} removida`)
+          s.setStatus(`✓ ${target} removed`)
           s.setSelected(Math.max(0, s.selected - 1))
         }
         s.setMode('browse')
@@ -240,7 +248,7 @@ function ConfirmDelete({ width, names }: { width: number; names: string[] }) {
     { key: 'escape', action: () => useTuiStore.getState().setMode('browse') },
   ])
 
-  return <text height={1} width={width} color="red">Remover {name}? [s/n]</text>
+  return <text height={1} width={width} color="red">Remove {name}? [y/n]</text>
 }
 
 function NewGroupInput({ width }: { width: number }) {
@@ -260,7 +268,7 @@ function NewGroupInput({ width }: { width: number }) {
         s.vault.data.groups[trimmed] ??= {}
         saveVault(s.vault)
         s.setGroup(trimmed)
-        s.setStatus(`✓ grupo "${trimmed}" criado`)
+        s.setStatus(`✓ group "${trimmed}" created`)
       }
       s.setMode('browse')
       return
@@ -272,7 +280,7 @@ function NewGroupInput({ width }: { width: number }) {
     if (key.length === 1 && !event.ctrl && !event.alt) setName((n: string) => n + key)
   })
 
-  return <text height={1} width={width} color="yellow">novo grupo: {name}▏ (Enter cria, Esc cancela)</text>
+  return <text height={1} width={width} color="yellow">new group: {name}▏ (Enter creates, Esc cancels)</text>
 }
 
 function Footer({ width }: { width?: number }) {
@@ -281,7 +289,7 @@ function Footer({ width }: { width?: number }) {
     <box flexDirection="column" height={2} width={width}>
       <text height={1} width={width} color="green">{status || ' '}</text>
       <text height={1} width={width} dim>
-        ↑↓ navega · ←→ grupo · a add · e edita · d remove · v revela · / busca · g grupo novo · q sai
+        ↑↓ move · ←→ group · a add · e edit · d delete · v reveal · / search · g new group · q quit
       </text>
     </box>
   )

@@ -1,7 +1,13 @@
 /** @jsxImportSource @termuijs/jsx */
 import type { KeyEvent } from '@termuijs/core'
 import { useInput, useRef, useState } from '@termuijs/jsx'
-import { removeSecret, saveVault, setSecret } from '../core/vault.ts'
+import {
+  NAME_PATTERN,
+  ownerOfName,
+  removeSecret,
+  saveVault,
+  setSecret,
+} from '../core/vault.ts'
 import { Field, editValue } from './inputs.tsx'
 import { useTuiStore } from './store.ts'
 
@@ -11,23 +17,32 @@ interface SecretFormProps {
   initialName?: string
   initialValue?: string
   initialNote?: string
+  initialAliases?: string[]
 }
 
-// Formulário de add/edit: um único useInput roteia navegação (Tab/↑↓),
-// Enter (salva), Esc (cancela) e edição de texto para o campo focado.
+const FIELD_COUNT = 4
+
+// Add/edit form: a single useInput routes navigation (Tab/↑↓), Enter
+// (save), Esc (cancel) and text editing to the focused field.
 export function SecretForm({
   width,
   height,
   initialName = '',
   initialValue = '',
   initialNote = '',
+  initialAliases = [],
 }: SecretFormProps) {
-  const [fields, setFields] = useState([initialName, initialValue, initialNote])
+  const [fields, setFields] = useState([
+    initialName,
+    initialValue,
+    initialNote,
+    initialAliases.join(', '),
+  ])
   const [focused, setFocused] = useState(0)
   const [error, setError] = useState('')
 
-  // Refs espelham o estado: o handler do useInput pode ter closure de um
-  // render antigo e precisa ler os valores atuais na hora do Enter/Tab.
+  // Refs mirror the state: the useInput handler may hold a closure from an
+  // old render and needs the current values when Enter/Tab arrive.
   const fieldsRef = useRef(fields)
   fieldsRef.current = fields
   const focusedRef = useRef(0)
@@ -39,23 +54,49 @@ export function SecretForm({
   const setMode = useTuiStore((s) => s.setMode)
   const setStatus = useTuiStore((s) => s.setStatus)
 
-  const [name, value, note] = fields as [string, string, string]
+  const [name, value, note, aliasesText] = fields as [string, string, string, string]
   const innerWidth = width - 4
 
   const save = () => {
     if (!vault) return
-    const [currentName, currentValue, currentNote] = fieldsRef.current as [string, string, string]
+    const [currentName, currentValue, currentNote, currentAliases] = fieldsRef.current as [
+      string,
+      string,
+      string,
+      string,
+    ]
     const trimmed = currentName.trim()
-    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(trimmed)) {
-      setError('Nome inválido: use letras, números e _ (não pode começar com número).')
+    if (!NAME_PATTERN.test(trimmed)) {
+      setError('Invalid name: use letters, numbers and _ (cannot start with a number).')
+      return
+    }
+    const aliases = currentAliases
+      .split(/[,\s]+/)
+      .map((a) => a.trim())
+      .filter((a) => a !== '' && a !== trimmed)
+    const badAlias = aliases.find((a) => !NAME_PATTERN.test(a))
+    if (badAlias) {
+      setError(`Invalid alias "${badAlias}": use letters, numbers and _.`)
+      return
+    }
+    for (const alias of aliases) {
+      const owner = ownerOfName(vault, group, alias)
+      if (owner && owner !== trimmed && owner !== initialName) {
+        setError(`Alias "${alias}" is already taken by "${owner}".`)
+        return
+      }
+    }
+    const owner = ownerOfName(vault, group, trimmed)
+    if (owner && owner !== trimmed && owner !== initialName) {
+      setError(`"${trimmed}" is already an alias of "${owner}".`)
       return
     }
     if (mode === 'edit' && initialName && initialName !== trimmed) {
       removeSecret(vault, group, initialName)
     }
-    setSecret(vault, group, trimmed, currentValue, currentNote.trim() || undefined)
+    setSecret(vault, group, trimmed, currentValue, currentNote.trim() || undefined, aliases)
     saveVault(vault)
-    setStatus(`✓ ${trimmed} salva no grupo "${group}"`)
+    setStatus(`✓ ${trimmed} saved to group "${group}"`)
     setMode('browse')
   }
 
@@ -66,11 +107,11 @@ export function SecretForm({
       return
     }
     if (key === 'tab' || key === 'down') {
-      setFocused((f: number) => (f + (event.shift ? 2 : 1)) % 3)
+      setFocused((f: number) => (f + (event.shift ? FIELD_COUNT - 1 : 1)) % FIELD_COUNT)
       return
     }
     if (key === 'up') {
-      setFocused((f: number) => (f + 2) % 3)
+      setFocused((f: number) => (f + FIELD_COUNT - 1) % FIELD_COUNT)
       return
     }
     if (key === 'enter' || key === 'return') {
@@ -87,13 +128,14 @@ export function SecretForm({
   return (
     <box flexDirection="column" padding={1} border="round" borderColor="yellow" gap={1} width={width} height={height}>
       <text height={1} width={innerWidth} bold color="yellow">
-        {mode === 'edit' ? `Editar ${initialName}` : 'Nova secret'}
+        {mode === 'edit' ? `Edit ${initialName}` : 'New secret'}
       </text>
-      <Field label="Nome:" value={name} width={innerWidth} isFocused={focused === 0} placeholder="POSTGRES_DB" />
-      <Field label="Valor:" value={value} width={innerWidth} isFocused={focused === 1} placeholder="valor da secret" />
-      <Field label="Nota:" value={note} width={innerWidth} isFocused={focused === 2} placeholder="(opcional)" />
+      <Field label="Name:" value={name} width={innerWidth} isFocused={focused === 0} placeholder="POSTGRES_DB" />
+      <Field label="Value:" value={value} width={innerWidth} isFocused={focused === 1} placeholder="secret value" />
+      <Field label="Note:" value={note} width={innerWidth} isFocused={focused === 2} placeholder="(optional)" />
+      <Field label="Aliases:" value={aliasesText} width={innerWidth} isFocused={focused === 3} placeholder="DB_URL, POSTGRES_URL (optional)" />
       {error ? <text height={1} width={innerWidth} color="red">{error}</text> : null}
-      <text height={1} width={innerWidth} dim>Tab/↑↓ campos · Enter salva · Esc cancela</text>
+      <text height={1} width={innerWidth} dim>Tab/↑↓ fields · Enter saves · Esc cancels</text>
     </box>
   )
 }
