@@ -36,7 +36,7 @@ export function makeVaultAccess({ crypto, sessions, config, repositoryFor }: Vau
       const minLength = config.minPasswordLength()
       if (password.length < minLength) {
         throw new Error(
-          `Password must be at least ${minLength} characters (KEY_MIN_PASSWORD_LENGTH).`,
+          `Password must be at least ${minLength} characters (KV_MIN_PASSWORD_LENGTH).`,
         )
       }
       const repository = resolve(location)
@@ -81,7 +81,7 @@ export function makeVaultAccess({ crypto, sessions, config, repositoryFor }: Vau
       const minLength = config.minPasswordLength()
       if (newPassword.length < minLength) {
         throw new Error(
-          `Password must be at least ${minLength} characters (KEY_MIN_PASSWORD_LENGTH).`,
+          `Password must be at least ${minLength} characters (KV_MIN_PASSWORD_LENGTH).`,
         )
       }
       const kdf = crypto.newKdfParams()

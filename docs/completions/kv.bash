@@ -1,4 +1,4 @@
-_key_completions() {
+_kv_completions() {
   local cur prev words cword
   cur=${COMP_WORDS[COMP_CWORD]}
   prev=${COMP_WORDS[COMP_CWORD - 1]}
@@ -9,7 +9,7 @@ _key_completions() {
 
   case $prev in
     -g | --group)
-      COMPREPLY=($(compgen -W "$(command key __complete groups 2>/dev/null)" -- "$cur"))
+      COMPREPLY=($(compgen -W "$(command kv __complete groups 2>/dev/null)" -- "$cur"))
       return
       ;;
     -e | --env | --from)
@@ -46,14 +46,14 @@ _key_completions() {
 
   case $cmd in
     apply)
-      COMPREPLY=($(compgen -W "all $(command key __complete names "${fwd[@]}" 2>/dev/null)" -- "$cur"))
+      COMPREPLY=($(compgen -W "all $(command kv __complete names "${fwd[@]}" 2>/dev/null)" -- "$cur"))
       ;;
     get | rm | set | alias)
-      COMPREPLY=($(compgen -W "$(command key __complete names "${fwd[@]}" 2>/dev/null)" -- "$cur"))
+      COMPREPLY=($(compgen -W "$(command kv __complete names "${fwd[@]}" 2>/dev/null)" -- "$cur"))
       ;;
     share | import)
-      COMPREPLY=($(compgen -W "$(command key __complete groups 2>/dev/null)" -- "$cur"))
+      COMPREPLY=($(compgen -W "$(command kv __complete groups 2>/dev/null)" -- "$cur"))
       ;;
   esac
 }
-complete -F _key_completions key
+complete -F _kv_completions kv

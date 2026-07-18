@@ -1,16 +1,16 @@
 {
-  "name": "key",
+  "name": "kv",
   "version": "0.1.0",
-  "description": "Encrypted .env manager with a TUI — sops-style password vault with `key apply`",
+  "description": "Encrypted .env manager with a TUI — sops-style password vault with `kv apply`",
   "type": "module",
   "bin": {
-    "key": "./src/index.ts"
+    "kv": "./src/index.ts"
   },
   "scripts": {
     "dev": "bun run src/index.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
-    "build": "bun build --compile --minify src/index.ts --outfile dist/key",
+    "build": "bun build --compile --minify src/index.ts --outfile dist/kv",
     "build:release": "bun run scripts/build-release.ts"
   },
   "engines": {

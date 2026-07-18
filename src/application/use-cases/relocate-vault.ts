@@ -1,4 +1,4 @@
-// The `key vault` flow: inspect or change where the vault is stored,
+// The `kv vault` flow: inspect or change where the vault is stored,
 // optionally copying the (encrypted) envelope to the new location.
 import type { ConfigStore, RepositoryFactory } from '../ports.ts'
 

@@ -30,7 +30,7 @@ export async function unlockVault(): Promise<Vault> {
       if (!volatile) {
         process.stderr.write(
           uiErr.yellow('warning:') +
-            ' XDG_RUNTIME_DIR unavailable; session stored at ~/.cache/key/session (disk).\n',
+            ' XDG_RUNTIME_DIR unavailable; session stored at ~/.cache/kv/session (disk).\n',
         )
       }
       return vault
@@ -46,13 +46,16 @@ export async function unlockVault(): Promise<Vault> {
   throw new WrongPasswordError()
 }
 
-// Group resolution: --group > .key file in the current directory > "default".
+// Group resolution: --group > .kv file in the current directory (.key still
+// honored from when the tool was named `key`) > "default".
 export function resolveGroup(flag: string | undefined, cwd = process.cwd()): string {
   if (flag) return flag
-  const marker = join(cwd, '.key')
-  if (existsSync(marker)) {
-    const name = readFileSync(marker, 'utf8').trim()
-    if (name) return name
+  for (const file of ['.kv', '.key']) {
+    const marker = join(cwd, file)
+    if (existsSync(marker)) {
+      const name = readFileSync(marker, 'utf8').trim()
+      if (name) return name
+    }
   }
   return DEFAULT_GROUP
 }

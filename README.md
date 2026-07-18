@@ -1,9 +1,9 @@
-# key
+# kv
 
-Encrypted .env manager with a TUI, in the spirit of [sops](https://github.com/getsops/sops): only whoever has the password can decrypt. The differentiator is `key apply`, which fills real values straight into the project's `.env`.
+Encrypted .env manager with a TUI, in the spirit of [sops](https://github.com/getsops/sops): only whoever has the password can decrypt. The differentiator is `kv apply`, which fills real values straight into the project's `.env`.
 
 ```
-POSTGRES_DB=placeholder      →  key apply POSTGRES_DB  →  POSTGRES_DB=real_value
+POSTGRES_DB=placeholder      →  kv apply POSTGRES_DB  →  POSTGRES_DB=real_value
 ```
 
 ## Install
@@ -14,11 +14,11 @@ POSTGRES_DB=placeholder      →  key apply POSTGRES_DB  →  POSTGRES_DB=real_v
 
 ```bash
 bun install
-bun run build          # → dist/key (this platform)
+bun run build          # → dist/kv (this platform)
 bun run build:release  # → dist/release/*.tar.gz (linux/darwin × x64/arm64, for GitHub Releases)
 ```
 
-Copy `dist/key` anywhere on your `PATH` — the machine running it doesn't need Bun.
+Copy `dist/kv` anywhere on your `PATH` — the machine running it doesn't need Bun.
 
 ### From source
 
@@ -26,7 +26,7 @@ Requires [Bun](https://bun.sh) ≥ 1.3.
 
 ```bash
 bun install
-bun link   # puts the `key` command on your PATH
+bun link   # puts the `kv` command on your PATH
 ```
 
 ### Shell completions
@@ -34,38 +34,38 @@ bun link   # puts the `key` command on your PATH
 Completion scripts live in [`docs/completions/`](docs/completions/) — subcommands, flags, and (when the vault session is unlocked) group and secret *names* are completed dynamically; values are never involved:
 
 ```bash
-cp docs/completions/_key "${fpath[1]}/_key"                                       # zsh
-cp docs/completions/key.bash ~/.local/share/bash-completion/completions/key      # bash
-cp docs/completions/key.fish ~/.config/fish/completions/key.fish                 # fish
+cp docs/completions/_kv "${fpath[1]}/_kv"                                       # zsh
+cp docs/completions/kv.bash ~/.local/share/bash-completion/completions/kv      # bash
+cp docs/completions/kv.fish ~/.config/fish/completions/kv.fish                 # fish
 ```
 
 ## Usage
 
 ```bash
-key init                        # create the vault (~/.config/key/vault.enc)
-key                             # open the TUI
-key scan                        # import an existing ./.env into the vault
-key set POSTGRES_DB             # store a secret (value via hidden prompt)
-key apply POSTGRES_DB           # replace the value in ./.env
-key apply all                   # apply everything the vault knows about
-key apply all --from .env.example   # generate ./.env from a template
-key run -- npm start            # run with secrets as env vars (no .env at all)
-key diff                        # drift between ./.env and the vault (names only)
-key get POSTGRES_DB             # print the value (pipe-friendly)
-key get POSTGRES_DB --copy      # copy to clipboard, auto-clears in 30s
-key list                        # list groups and names (never values)
-key rm POSTGRES_DB              # remove with confirmation
-key alias add DATABASE_URL DB_URL POSTGRES_URL   # alternative names, same value
-key alias rm DATABASE_URL POSTGRES_URL           # remove aliases
-key alias DATABASE_URL          # list a secret's aliases
-key alias move DB_URL DATABASE_URL               # DB_URL becomes an alias of DATABASE_URL
-key lock                        # end the session (ask for the password again)
-key passwd                      # change the password (re-encrypts the vault)
-key vault                       # show where the vault is stored
-key vault sqlite://~/.local/share/key/vault.db      # move the vault to SQLite
-key vault postgres://user:pass@host:5432/db         # ...or to Postgres
-key share backend               # share a group: encrypted QR + one-time code
-key import                      # paste a shared payload and type the code
+kv init                        # create the vault (~/.config/kv/vault.enc)
+kv                             # open the TUI
+kv scan                        # import an existing ./.env into the vault
+kv set POSTGRES_DB             # store a secret (value via hidden prompt)
+kv apply POSTGRES_DB           # replace the value in ./.env
+kv apply all                   # apply everything the vault knows about
+kv apply all --from .env.example   # generate ./.env from a template
+kv run -- npm start            # run with secrets as env vars (no .env at all)
+kv diff                        # drift between ./.env and the vault (names only)
+kv get POSTGRES_DB             # print the value (pipe-friendly)
+kv get POSTGRES_DB --copy      # copy to clipboard, auto-clears in 30s
+kv list                        # list groups and names (never values)
+kv rm POSTGRES_DB              # remove with confirmation
+kv alias add DATABASE_URL DB_URL POSTGRES_URL   # alternative names, same value
+kv alias rm DATABASE_URL POSTGRES_URL           # remove aliases
+kv alias DATABASE_URL          # list a secret's aliases
+kv alias move DB_URL DATABASE_URL               # DB_URL becomes an alias of DATABASE_URL
+kv lock                        # end the session (ask for the password again)
+kv passwd                      # change the password (re-encrypts the vault)
+kv vault                       # show where the vault is stored
+kv vault sqlite://~/.local/share/kv/vault.db      # move the vault to SQLite
+kv vault postgres://user:pass@host:5432/db         # ...or to Postgres
+kv share backend               # share a group: encrypted QR + one-time code
+kv import                      # paste a shared payload and type the code
 ```
 
 ### Aliases
@@ -73,84 +73,84 @@ key import                      # paste a shared payload and type the code
 A secret can have alternative names that resolve to the same value — handy when different projects call the same thing `DB_URL`, `POSTGRES_URL` or `DATABASE_URL`:
 
 ```bash
-key set DATABASE_URL
-key alias add DATABASE_URL DB_URL POSTGRES_URL
-key apply all    # fills DATABASE_URL, DB_URL and POSTGRES_URL, all with the same value
-key get DB_URL   # also resolves through the alias
+kv set DATABASE_URL
+kv alias add DATABASE_URL DB_URL POSTGRES_URL
+kv apply all    # fills DATABASE_URL, DB_URL and POSTGRES_URL, all with the same value
+kv get DB_URL   # also resolves through the alias
 ```
 
 Aliases are unique within a group: an alias can't collide with another secret's name or aliases. In the TUI, the add/edit form has an **Aliases** field (comma-separated) and the list shows a `+N` badge next to names that have aliases.
 
-Ended up with two secrets that should be one? `key alias move SOURCE TARGET` folds them: `SOURCE` is deleted and its name — plus any aliases it had — become aliases of `TARGET`, so every old name keeps resolving, now to `TARGET`'s value. `SOURCE`'s own value is discarded (the command warns and asks for confirmation when the values differ). In the TUI, press `m` on a secret, pick the target with `↑↓` and confirm.
+Ended up with two secrets that should be one? `kv alias move SOURCE TARGET` folds them: `SOURCE` is deleted and its name — plus any aliases it had — become aliases of `TARGET`, so every old name keeps resolving, now to `TARGET`'s value. `SOURCE`'s own value is discarded (the command warns and asks for confirmation when the values differ). In the TUI, press `m` on a secret, pick the target with `↑↓` and confirm.
 
 ### Vault storage (file or database)
 
-By default the vault is a local file (`~/.config/key/vault.enc`), but it can live in a database instead — useful for backups or sharing one vault across machines:
+By default the vault is a local file (`~/.config/kv/vault.enc`), but it can live in a database instead — useful for backups or sharing one vault across machines:
 
 ```bash
-key vault                                        # show current location/backend
-key vault sqlite:///home/me/vaults/key.db        # local SQLite database
-key vault postgres://user:pass@host:5432/mydb    # Postgres (also mysql:// / mariadb://)
+kv vault                                        # show current location/backend
+kv vault sqlite:///home/me/vaults/kv.db        # local SQLite database
+kv vault postgres://user:pass@host:5432/mydb    # Postgres (also mysql:// / mariadb://)
 ```
 
-- The location is a **file path** or a **database URL** (`sqlite://`, `postgres://`, `postgresql://`, `mysql://`, `mariadb://`), stored in `~/.config/key/config.json`; `KEY_VAULT_PATH` overrides it (same syntax).
-- When switching, `key vault` offers to **copy the existing vault** to the new location — no password needed, since only ciphertext moves.
+- The location is a **file path** or a **database URL** (`sqlite://`, `postgres://`, `postgresql://`, `mysql://`, `mariadb://`), stored in `~/.config/kv/config.json`; `KV_VAULT_PATH` overrides it (same syntax).
+- When switching, `kv vault` offers to **copy the existing vault** to the new location — no password needed, since only ciphertext moves.
 - The database only ever stores the **encrypted envelope** (a single row in a `key_vault` table); encryption/decryption always happens locally, and the previous version is kept in a `previous` column (the file backend keeps a `.bak`).
 - Database drivers are Bun built-ins (`Bun.SQL`) — no extra dependencies.
 
 ### Sharing a group (QR code)
 
-`key share GROUP` packages the group's secrets (values, notes, aliases), gzips and **encrypts them with a random one-time code**, then prints the payload as a terminal QR code plus the code:
+`kv share GROUP` packages the group's secrets (values, notes, aliases), gzips and **encrypts them with a random one-time code**, then prints the payload as a terminal QR code plus the code:
 
 ```
-$ key share backend
+$ kv share backend
 Sharing group "backend" — 2 secrets: API_KEY, DATABASE_URL
 
   █▀▀▀▀▀█ ▀▄█▀ ... (scannable QR)
 
-Payload (same content as the QR): keyshare1:fK5KFb9jQhUX...
+Payload (same content as the QR): kvshare1:fK5KFb9jQhUX...
 One-time code:  9XDC-AAB5-9V4B-2SNG
 ```
 
-On the other machine, `key import` (paste the payload — scanned from the QR or copied as text — then type the code) decrypts it and merges the secrets into the receiver's own vault, reporting what was added/replaced and skipping names that collide with existing aliases. `--group` overrides the target group.
+On the other machine, `kv import` (paste the payload — scanned from the QR or copied as text — then type the code) decrypts it and merges the secrets into the receiver's own vault, reporting what was added/replaced and skipping names that collide with existing aliases. `--group` overrides the target group.
 
 - The QR/payload alone is useless: it's AES-256-GCM ciphertext keyed from the one-time code (scrypt). Send the code through a **different channel** (say it out loud, different messenger).
 - The code is forgiving: case, dashes and spaces don't matter.
-- Big groups can exceed what a terminal QR can hold (~1200 chars); `key share` then prints the payload text only.
+- Big groups can exceed what a terminal QR can hold (~1200 chars); `kv share` then prints the payload text only.
 
 ### Groups
 
 Secrets live in groups inside the vault (`default` if unspecified). Group resolution for `apply`/`set`/`get` follows this order:
 
 1. `--group`/`-g` flag
-2. A `.key` file in the project directory containing the group name
+2. A `.kv` file in the project directory containing the group name (a legacy `.key` file is also honored)
 3. `default`
 
 ```bash
-echo "my-project" > .key   # every `key apply` in this directory uses the my-project group
+echo "my-project" > .kv   # every `kv apply` in this directory uses the my-project group
 ```
 
 ### Daily workflow
 
-- **`key scan`** — onboarding: reads the current `.env` and imports its variables into the vault, previewing what is new/updated/unchanged (names only, never values) before asking for confirmation.
-- **`key run -- <command>`** — runs a command with the group's secrets (canonical names *and* aliases) injected as environment variables. No plaintext ever touches the disk; the child's exit code is propagated.
-- **`key diff`** — drift report between `.env` and the vault: in sync / value differs / missing from vault / in vault but not in the file. Prints names only and exits 1 when values differ, so it can gate scripts and CI.
-- **`key get NAME --copy`** (or the `c` key in the TUI) — copies the value to the clipboard via `wl-copy`/`xclip`/`xsel` and auto-clears it after 30 seconds (only if the clipboard still holds that value).
+- **`kv scan`** — onboarding: reads the current `.env` and imports its variables into the vault, previewing what is new/updated/unchanged (names only, never values) before asking for confirmation.
+- **`kv run -- <command>`** — runs a command with the group's secrets (canonical names *and* aliases) injected as environment variables. No plaintext ever touches the disk; the child's exit code is propagated.
+- **`kv diff`** — drift report between `.env` and the vault: in sync / value differs / missing from vault / in vault but not in the file. Prints names only and exits 1 when values differ, so it can gate scripts and CI.
+- **`kv get NAME --copy`** (or the `c` key in the TUI) — copies the value to the clipboard via `wl-copy`/`xclip`/`xsel` and auto-clears it after 30 seconds (only if the clipboard still holds that value).
 
 ### apply
 
 - Edits the `.env` **in-place**, preserving comments, line order, `export` prefix and CRLF.
 - **Safe by default**: a variable that already holds a (different, non-empty) value is left alone and reported as skipped; pass `--force`/`-f` to overwrite it.
-- `key config force on` makes overwriting the default so you never have to type `-f`; `--safe`/`-s` restores the skip behavior for a single run, and `key config force off` restores it permanently. `KEY_FORCE_APPLY=1|0` overrides the persisted setting.
+- `kv config force on` makes overwriting the default so you never have to type `-f`; `--safe`/`-s` restores the skip behavior for a single run, and `kv config force off` restores it permanently. `KV_FORCE_APPLY=1|0` overrides the persisted setting.
 - Values with spaces/`#`/quotes get double quotes automatically.
-- `key apply VAR` with a variable missing from the `.env` asks before appending it at the end.
-- `key apply all` prints a summary: `✓ 4 applied · ↷ 1 already set, use -f to overwrite (...) · − 2 missing from vault (...)`.
-- `key apply all --from .env.example` generates the target from a template instead of patching in place (the template is never modified; variables the vault doesn't know keep their template value). Without `--force`, non-empty values already in the target survive the regeneration.
+- `kv apply VAR` with a variable missing from the `.env` asks before appending it at the end.
+- `kv apply all` prints a summary: `✓ 4 applied · ↷ 1 already set, use -f to overwrite (...) · − 2 missing from vault (...)`.
+- `kv apply all --from .env.example` generates the target from a template instead of patching in place (the template is never modified; variables the vault doesn't know keep their template value). Without `--force`, non-empty values already in the target survive the regeneration.
 - `--env file` targets another file (default `./.env`).
 
 ### TUI
 
-`key` with no arguments opens the panel. Keys:
+`kv` with no arguments opens the panel. Keys:
 
 | Key | Action |
 |---|---|
@@ -165,20 +165,20 @@ echo "my-project" > .key   # every `key apply` in this directory uses the my-pro
 
 ## Security model
 
-- **Vault**: a single file, `~/.config/key/vault.enc`. The payload is JSON encrypted with **AES-256-GCM**; the key is derived from the password via **scrypt** (N=2¹⁵, r=8, p=1, random salt). A wrong password or a tampered file fails GCM authentication.
-- **Session**: after unlocking, the **derived key** (never the password) lives in `$XDG_RUNTIME_DIR/key/session` (tmpfs, gone on reboot, `0600`) for 15 minutes (configurable via `KEY_SESSION_TTL`, in seconds), renewed on each use. `key lock` deletes it immediately. Without `XDG_RUNTIME_DIR` it falls back to `~/.cache/key/session` (disk) with a warning.
+- **Vault**: a single file, `~/.config/kv/vault.enc`. The payload is JSON encrypted with **AES-256-GCM**; the key is derived from the password via **scrypt** (N=2¹⁵, r=8, p=1, random salt). A wrong password or a tampered file fails GCM authentication.
+- **Session**: after unlocking, the **derived key** (never the password) lives in `$XDG_RUNTIME_DIR/kv/session` (tmpfs, gone on reboot, `0600`) for 15 minutes (configurable via `KV_SESSION_TTL`, in seconds), renewed on each use. `kv lock` deletes it immediately. Without `XDG_RUNTIME_DIR` it falls back to `~/.cache/kv/session` (disk) with a warning.
 - **Atomic writes**: the vault is saved via `.tmp` + rename, keeping the previous version as `vault.enc.bak`.
-- Values never travel through argv (`key set` reads via hidden prompt) and `apply` only prints names, never values.
+- Values never travel through argv (`kv set` reads via hidden prompt) and `apply` only prints names, never values.
 
 Environment variables:
 
 | Variable | Meaning | Default |
 |---|---|---|
-| `KEY_VAULT_PATH` | Vault location: file path or database URL (overrides `key vault` config) | `~/.config/key/vault.enc` |
-| `KEY_FORCE_APPLY` | `1`/`true` or `0`/`false`: overwrite existing values on `key apply` (overrides `key config force`) | unset |
-| `KEY_SESSION_TTL` | Session TTL in seconds | `900` |
-| `KEY_MIN_PASSWORD_LENGTH` | Minimum vault password length (enforced by `init` and `passwd`) | `8` |
-| `KEY_SESSION_PATH` | Session cache path (useful in tests) | `$XDG_RUNTIME_DIR/key/session` |
+| `KV_VAULT_PATH` | Vault location: file path or database URL (overrides `kv vault` config) | `~/.config/kv/vault.enc` |
+| `KV_FORCE_APPLY` | `1`/`true` or `0`/`false`: overwrite existing values on `kv apply` (overrides `kv config force`) | unset |
+| `KV_SESSION_TTL` | Session TTL in seconds | `900` |
+| `KV_MIN_PASSWORD_LENGTH` | Minimum vault password length (enforced by `init` and `passwd`) | `8` |
+| `KV_SESSION_PATH` | Session cache path (useful in tests) | `$XDG_RUNTIME_DIR/kv/session` |
 
 ## Development
 

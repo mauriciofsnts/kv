@@ -1,4 +1,4 @@
-// The `key apply` flow: fill real values into a .env file, resolving
+// The `kv apply` flow: fill real values into a .env file, resolving
 // canonical names and aliases alike, preserving the file's formatting.
 import {
   type EnvEntry,

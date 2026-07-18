@@ -18,7 +18,7 @@ beforeEach(() => {
 
 afterEach(() => {
   rmSync(dir, { recursive: true, force: true })
-  delete process.env.KEY_VAULT_PATH
+  delete process.env.KV_VAULT_PATH
   delete process.env.XDG_CONFIG_HOME
 })
 
@@ -102,20 +102,20 @@ describe('vaultLocation', () => {
   test('env > config > default', () => {
     process.env.XDG_CONFIG_HOME = dir
 
-    expect(jsonConfigStore.vaultLocation()).toBe(join(dir, 'key', 'vault.enc'))
+    expect(jsonConfigStore.vaultLocation()).toBe(join(dir, 'kv', 'vault.enc'))
 
     jsonConfigStore.setVaultLocation('sqlite:///somewhere/vault.db')
     expect(jsonConfigStore.vaultLocation()).toBe('sqlite:///somewhere/vault.db')
 
-    process.env.KEY_VAULT_PATH = '/env/wins.enc'
+    process.env.KV_VAULT_PATH = '/env/wins.enc'
     expect(jsonConfigStore.vaultLocation()).toBe('/env/wins.enc')
     expect(jsonConfigStore.locationOverridden()).toBe(true)
   })
 
   test('corrupted config falls back to the default', () => {
     process.env.XDG_CONFIG_HOME = dir
-    mkdirSync(join(dir, 'key'), { recursive: true })
+    mkdirSync(join(dir, 'kv'), { recursive: true })
     writeFileSync(configPath(), 'not json', { mode: 0o600 })
-    expect(jsonConfigStore.vaultLocation()).toBe(join(dir, 'key', 'vault.enc'))
+    expect(jsonConfigStore.vaultLocation()).toBe(join(dir, 'kv', 'vault.enc'))
   })
 })

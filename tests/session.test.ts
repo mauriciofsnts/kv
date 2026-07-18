@@ -9,17 +9,17 @@ let dir: string
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'key-session-'))
-  process.env.KEY_SESSION_PATH = join(dir, 'session')
+  process.env.KV_SESSION_PATH = join(dir, 'session')
   process.env.XDG_CONFIG_HOME = join(dir, 'config')
-  delete process.env.KEY_SESSION_TTL
+  delete process.env.KV_SESSION_TTL
 })
 
 afterEach(() => {
   rmSync(dir, { recursive: true, force: true })
-  delete process.env.KEY_SESSION_PATH
-  delete process.env.KEY_SESSION_TTL
-  delete process.env.KEY_MIN_PASSWORD_LENGTH
-  delete process.env.KEY_FORCE_APPLY
+  delete process.env.KV_SESSION_PATH
+  delete process.env.KV_SESSION_TTL
+  delete process.env.KV_MIN_PASSWORD_LENGTH
+  delete process.env.KV_FORCE_APPLY
   delete process.env.XDG_CONFIG_HOME
 })
 
@@ -35,22 +35,22 @@ describe('session', () => {
   })
 
   test('expired session returns null and deletes the file', () => {
-    process.env.KEY_SESSION_TTL = '1'
+    process.env.KV_SESSION_TTL = '1'
     const key = Buffer.from('b'.repeat(32))
     fileSessionCache.store(key)
-    const raw = JSON.parse(readFileSync(process.env.KEY_SESSION_PATH!, 'utf8'))
+    const raw = JSON.parse(readFileSync(process.env.KV_SESSION_PATH!, 'utf8'))
     raw.expiresAt = Date.now() - 1000
-    writeFileSync(process.env.KEY_SESSION_PATH!, JSON.stringify(raw))
+    writeFileSync(process.env.KV_SESSION_PATH!, JSON.stringify(raw))
     expect(fileSessionCache.load()).toBeNull()
   })
 
   test('load renews the TTL', () => {
     const key = Buffer.from('c'.repeat(32))
     fileSessionCache.store(key)
-    const before = JSON.parse(readFileSync(process.env.KEY_SESSION_PATH!, 'utf8')).expiresAt
+    const before = JSON.parse(readFileSync(process.env.KV_SESSION_PATH!, 'utf8')).expiresAt
     Bun.sleepSync(5)
     fileSessionCache.load()
-    const after = JSON.parse(readFileSync(process.env.KEY_SESSION_PATH!, 'utf8')).expiresAt
+    const after = JSON.parse(readFileSync(process.env.KV_SESSION_PATH!, 'utf8')).expiresAt
     expect(after).toBeGreaterThan(before)
   })
 
@@ -62,7 +62,7 @@ describe('session', () => {
   })
 
   test('corrupted file is treated as no session', () => {
-    writeFileSync(process.env.KEY_SESSION_PATH!, 'not json')
+    writeFileSync(process.env.KV_SESSION_PATH!, 'not json')
     expect(fileSessionCache.load()).toBeNull()
   })
 })
@@ -72,19 +72,19 @@ describe('minPasswordLength', () => {
     expect(jsonConfigStore.minPasswordLength()).toBe(8)
   })
 
-  test('reads KEY_MIN_PASSWORD_LENGTH', () => {
-    process.env.KEY_MIN_PASSWORD_LENGTH = '12'
+  test('reads KV_MIN_PASSWORD_LENGTH', () => {
+    process.env.KV_MIN_PASSWORD_LENGTH = '12'
     expect(jsonConfigStore.minPasswordLength()).toBe(12)
-    process.env.KEY_MIN_PASSWORD_LENGTH = '1'
+    process.env.KV_MIN_PASSWORD_LENGTH = '1'
     expect(jsonConfigStore.minPasswordLength()).toBe(1)
   })
 
   test('falls back to 8 on invalid values', () => {
-    process.env.KEY_MIN_PASSWORD_LENGTH = 'abc'
+    process.env.KV_MIN_PASSWORD_LENGTH = 'abc'
     expect(jsonConfigStore.minPasswordLength()).toBe(8)
-    process.env.KEY_MIN_PASSWORD_LENGTH = '0'
+    process.env.KV_MIN_PASSWORD_LENGTH = '0'
     expect(jsonConfigStore.minPasswordLength()).toBe(8)
-    process.env.KEY_MIN_PASSWORD_LENGTH = '-5'
+    process.env.KV_MIN_PASSWORD_LENGTH = '-5'
     expect(jsonConfigStore.minPasswordLength()).toBe(8)
   })
 })
@@ -104,26 +104,26 @@ describe('forceApply', () => {
   test('setForceApply keeps the vault location intact', () => {
     jsonConfigStore.setVaultLocation('/tmp/some-vault.enc')
     jsonConfigStore.setForceApply(true)
-    delete process.env.KEY_VAULT_PATH
+    delete process.env.KV_VAULT_PATH
     expect(jsonConfigStore.vaultLocation()).toBe('/tmp/some-vault.enc')
     expect(jsonConfigStore.forceApply()).toBe(true)
   })
 
-  test('KEY_FORCE_APPLY overrides the persisted value', () => {
+  test('KV_FORCE_APPLY overrides the persisted value', () => {
     jsonConfigStore.setForceApply(true)
-    process.env.KEY_FORCE_APPLY = '0'
+    process.env.KV_FORCE_APPLY = '0'
     expect(jsonConfigStore.forceApply()).toBe(false)
-    process.env.KEY_FORCE_APPLY = 'false'
+    process.env.KV_FORCE_APPLY = 'false'
     expect(jsonConfigStore.forceApply()).toBe(false)
     jsonConfigStore.setForceApply(false)
-    process.env.KEY_FORCE_APPLY = '1'
+    process.env.KV_FORCE_APPLY = '1'
     expect(jsonConfigStore.forceApply()).toBe(true)
-    process.env.KEY_FORCE_APPLY = 'true'
+    process.env.KV_FORCE_APPLY = 'true'
     expect(jsonConfigStore.forceApply()).toBe(true)
   })
 
-  test('unrecognized KEY_FORCE_APPLY falls back to config', () => {
-    process.env.KEY_FORCE_APPLY = 'maybe'
+  test('unrecognized KV_FORCE_APPLY falls back to config', () => {
+    process.env.KV_FORCE_APPLY = 'maybe'
     expect(jsonConfigStore.forceApply()).toBe(false)
     jsonConfigStore.setForceApply(true)
     expect(jsonConfigStore.forceApply()).toBe(true)
