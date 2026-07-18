@@ -60,7 +60,8 @@ export interface SetValueResult {
 // Replaces the value of `name` keeping the rest of the line intact. When the
 // variable appears more than once, every occurrence is updated (the last one
 // wins for whoever consumes the .env, but leaving earlier ones with the old
-// value would leak a stale placeholder).
+// value would leak a stale placeholder). Inline ` # comments` survive, keeping
+// their column when the new value fits.
 export function setEnvValue(content: string, name: string, value: string): SetValueResult {
   const lines = splitLines(content)
   let found = false
@@ -68,10 +69,32 @@ export function setEnvValue(content: string, name: string, value: string): SetVa
     const match = line.text.match(VAR_LINE)
     if (match && match[2] === name) {
       found = true
-      line.text = `${match[1]}${match[2]}${match[3]}${quoteValue(value)}`
+      const rest = match[4]!
+      const hash = findInlineCommentStart(rest)
+      // When the old value is empty, `\s*` after `=` swallowed the padding
+      // that aligned the comment — drop it instead of prefixing the value.
+      const sep = rest.startsWith('#') ? match[3]!.replace(/\s+$/, '') : match[3]!
+      let text = `${match[1]}${match[2]}${sep}${quoteValue(value)}`
+      if (hash >= 0) {
+        const column = match[1]!.length + match[2]!.length + match[3]!.length + hash
+        text += ' '.repeat(Math.max(1, column - text.length)) + rest.slice(hash)
+      }
+      line.text = text
     }
   }
   return { content: joinLines(lines), found }
+}
+
+// Index of an inline comment's `#` inside the raw value portion of a line,
+// or -1. Mirrors unquoteValue: `#` inside quotes or glued to an unquoted
+// value (`a#b`) is not a comment.
+function findInlineCommentStart(raw: string): number {
+  if (raw.startsWith('#')) return 0
+  const quotedHead = raw.match(/^"(?:[^"\\]|\\.)*"/) ?? raw.match(/^'[^']*'/)
+  const offset = quotedHead ? quotedHead[0].length : 0
+  const at = raw.slice(offset).search(quotedHead ? /#/ : /\s#/)
+  if (at < 0) return -1
+  return offset + at + (quotedHead ? 0 : 1)
 }
 
 export function appendEnvVar(content: string, name: string, value: string): string {

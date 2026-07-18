@@ -64,6 +64,32 @@ describe('setEnvValue', () => {
     const { content } = setEnvValue('DB=1\nDB_HOST=2\n', 'DB', 'x')
     expect(content).toBe('DB=x\nDB_HOST=2\n')
   })
+
+  test('empty value with aligned inline comment: no padding leaks into the value', () => {
+    const line = 'ADMIN_USER_ID=                          # optional: DM on errors\n'
+    const { content } = setEnvValue(line, 'ADMIN_USER_ID', '1234')
+    expect(content).toBe('ADMIN_USER_ID=1234                      # optional: DM on errors\n')
+  })
+
+  test('preserves an inline comment after a non-empty value', () => {
+    const { content } = setEnvValue('PORT=3000  # http\n', 'PORT', '8080')
+    expect(content).toBe('PORT=8080  # http\n')
+  })
+
+  test('comment column collapses to one space when the value is longer', () => {
+    const { content } = setEnvValue('A=x # note\n', 'A', 'longer-value')
+    expect(content).toBe('A=longer-value # note\n')
+  })
+
+  test('preserves a comment after a quoted value containing #', () => {
+    const { content } = setEnvValue('A="v # not" # real\n', 'A', 'new')
+    expect(content).toBe('A=new       # real\n')
+  })
+
+  test('# glued to an unquoted value is not a comment', () => {
+    const { content } = setEnvValue('A=a#b\n', 'A', 'new')
+    expect(content).toBe('A=new\n')
+  })
 })
 
 describe('appendEnvVar', () => {
