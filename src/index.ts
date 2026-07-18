@@ -29,6 +29,7 @@ Usage:
   key alias NAME            List a secret's aliases
   key alias add NAME A...   Add aliases (alternative names, same value)
   key alias rm NAME A...    Remove aliases
+  key alias move NAME DEST  Turn NAME (and its aliases) into aliases of DEST
   key share [GROUP]         Share a group as an encrypted QR code + one-time code
   key import [PAYLOAD]      Import a shared group (asks for the one-time code)
   key lock                  End the session (ask for the password again)

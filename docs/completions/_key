@@ -79,7 +79,7 @@ _key() {
           ;;
         alias)
           _arguments $group_opt \
-            '1:action:(add rm)' \
+            '1:action:(add rm move)' \
             '*:secret:_key_names'
           ;;
         scan|diff)

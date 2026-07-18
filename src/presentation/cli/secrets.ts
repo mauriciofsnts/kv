@@ -98,8 +98,10 @@ export async function cmdRm(name: string | undefined, groupFlag?: string): Promi
 // key alias NAME            → list aliases
 // key alias add NAME A B    → add aliases
 // key alias rm NAME A B     → remove aliases
+// key alias move NAME DEST  → NAME (and its aliases) become aliases of DEST
 export async function cmdAlias(args: string[], groupFlag?: string): Promise<void> {
-  const usage = 'Usage: key alias NAME | key alias add NAME ALIAS... | key alias rm NAME ALIAS...'
+  const usage =
+    'Usage: key alias NAME | key alias add NAME ALIAS... | key alias rm NAME ALIAS... | key alias move NAME DEST'
   const [first, ...rest] = args
   if (!first) {
     console.error(usage)
@@ -108,6 +110,40 @@ export async function cmdAlias(args: string[], groupFlag?: string): Promise<void
 
   const vault = await unlockVault()
   const group = resolveGroup(groupFlag)
+
+  if (first === 'move') {
+    const [source, target, extra] = rest
+    if (!source || !target || extra) {
+      console.error(usage)
+      process.exit(1)
+    }
+    let plan: ReturnType<typeof manageSecrets.planMerge>
+    try {
+      plan = manageSecrets.planMerge(vault, group, source, target)
+    } catch (err) {
+      console.error(err instanceof Error ? err.message : String(err))
+      process.exit(1)
+    }
+    console.log(`"${source}" will become an alias of "${plan.target}" [group: ${group}].`)
+    if (plan.aliasesToMove.length > 0) {
+      console.log(`Its aliases move along: ${plan.aliasesToMove.join(', ')}.`)
+    }
+    if (plan.valuesDiffer) {
+      console.log(`The values differ — "${source}"'s value will be discarded.`)
+    }
+    if (!(await confirmPrompt('Proceed?'))) {
+      console.log('Nothing changed.')
+      return
+    }
+    const { target: canonical, moved } = await manageSecrets.mergeAsAlias(
+      vault,
+      group,
+      source,
+      target,
+    )
+    console.log(`✓ ${moved.join(', ')} → ${canonical} [group: ${group}]`)
+    return
+  }
 
   if (first === 'add' || first === 'rm') {
     const [name, ...aliases] = rest
