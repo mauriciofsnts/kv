@@ -1,4 +1,5 @@
 import { config } from '../../composition.ts'
+import { ui, uiErr } from './ui.ts'
 
 // key config                 → show the persisted settings
 // key config force <on|off>  → make `key apply` overwrite existing values by
@@ -7,15 +8,15 @@ export async function cmdConfig(args: string[]): Promise<void> {
   const [setting, value] = args
 
   if (!setting) {
-    console.log(`force apply: ${config.forceApply() ? 'on' : 'off'}`)
+    console.log(`${ui.dim('force apply:')} ${config.forceApply() ? ui.yellow('on') : ui.green('off')}`)
     if (process.env.KEY_FORCE_APPLY !== undefined) {
-      console.log('note:        set via KEY_FORCE_APPLY (overrides config.json)')
+      console.log(ui.dim('note:        set via KEY_FORCE_APPLY (overrides config.json)'))
     }
     return
   }
 
   if (setting !== 'force') {
-    console.error(`Unknown setting: ${setting}\nUsage: key config [force <on|off>]`)
+    console.error(uiErr.bad(`Unknown setting: ${setting}`) + '\nUsage: key config [force <on|off>]')
     process.exit(1)
   }
 
@@ -26,8 +27,8 @@ export async function cmdConfig(args: string[]): Promise<void> {
 
   config.setForceApply(value === 'on')
   if (value === 'on') {
-    console.log('✓ Force apply enabled: `key apply` now overwrites existing values (use --safe to skip them).')
+    console.log(ui.ok('Force apply enabled: `key apply` now overwrites existing values ') + ui.dim('(use --safe to skip them).'))
   } else {
-    console.log('✓ Force apply disabled: `key apply` skips variables that already have a value (use -f to overwrite).')
+    console.log(ui.ok('Force apply disabled: `key apply` skips variables that already have a value ') + ui.dim('(use -f to overwrite).'))
   }
 }

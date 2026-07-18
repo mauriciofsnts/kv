@@ -1,4 +1,5 @@
 import { groupEnvMap } from '../../domain/secret.ts'
+import { uiErr } from './ui.ts'
 import { resolveGroup, unlockVault } from './unlock.ts'
 
 // key run [-g group] -- <command...>: run a command with the group's
@@ -12,13 +13,15 @@ export async function cmdRun(command: string[], groupFlag?: string): Promise<voi
   const vault = await unlockVault()
   const group = resolveGroup(groupFlag)
   if (!(group in vault.data.groups)) {
-    console.error(`Group "${group}" does not exist in the vault.`)
+    console.error(uiErr.bad(`Group "${group}" does not exist in the vault.`))
     process.exit(1)
   }
 
   const env = groupEnvMap(vault.data, group)
   const count = Object.keys(env).length
-  process.stderr.write(`key: injecting ${count} variable${count === 1 ? '' : 's'} [group: ${group}]\n`)
+  process.stderr.write(
+    uiErr.dim(`key: injecting ${count} variable${count === 1 ? '' : 's'}`) + uiErr.group(group) + '\n',
+  )
 
   const proc = Bun.spawn(command, {
     env: { ...process.env, ...env },

@@ -5,6 +5,7 @@ import { vaultAccess } from '../../composition.ts'
 import { DEFAULT_GROUP } from '../../domain/secret.ts'
 import { WrongPasswordError } from '../../domain/errors.ts'
 import { hiddenPrompt } from './prompt.ts'
+import { statusLine, uiErr } from './ui.ts'
 
 const MAX_ATTEMPTS = 3
 
@@ -21,18 +22,22 @@ export async function unlockVault(): Promise<Vault> {
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     const password = await hiddenPrompt('Vault password: ')
+    const done = statusLine('unlocking vault…')
     try {
       const vault = await vaultAccess.openWithPassword(password)
+      done()
       const { volatile } = vaultAccess.startSession(vault)
       if (!volatile) {
         process.stderr.write(
-          'warning: XDG_RUNTIME_DIR unavailable; session stored at ~/.cache/key/session (disk).\n',
+          uiErr.yellow('warning:') +
+            ' XDG_RUNTIME_DIR unavailable; session stored at ~/.cache/key/session (disk).\n',
         )
       }
       return vault
     } catch (err) {
+      done()
       if (err instanceof WrongPasswordError && attempt < MAX_ATTEMPTS) {
-        process.stderr.write('Wrong password, try again.\n')
+        process.stderr.write(uiErr.red('Wrong password') + ', try again.\n')
         continue
       }
       throw err

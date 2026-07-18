@@ -12,57 +12,65 @@ import { cmdComplete } from './presentation/cli/completions.ts'
 import { cmdConfig } from './presentation/cli/configcmd.ts'
 import { cmdImport, cmdShare } from './presentation/cli/share.ts'
 import { cmdVault } from './presentation/cli/vaultcmd.ts'
+import { ui, uiErr, type Ui } from './presentation/cli/ui.ts'
 
-const HELP = `key — encrypted .env manager
-
-Usage:
-  key                       Open the TUI
-  key init                  Create the vault
-  key apply <VAR|all>       Fill values into ./.env
-  key apply all --from F    Generate ./.env from a template (e.g. .env.example)
-  key run -- CMD [args]     Run a command with the group's secrets as env vars
-  key scan                  Import an existing ./.env into the vault
-  key diff                  Show drift between ./.env and the vault (names only)
-  key set NAME              Store a secret (value via hidden prompt)
-  key get NAME [--copy]     Print a secret's value (or copy it, auto-clears)
-  key list                  List groups and names (never values)
-  key rm NAME               Remove a secret
-  key alias NAME            List a secret's aliases
-  key alias add NAME A...   Add aliases (alternative names, same value)
-  key alias rm NAME A...    Remove aliases
-  key alias move NAME DEST  Turn NAME (and its aliases) into aliases of DEST
-  key share [GROUP]         Share a group as an encrypted QR code + one-time code
-  key import [PAYLOAD]      Import a shared group (asks for the one-time code)
-  key lock                  End the session (ask for the password again)
-  key passwd                Change the vault password
-  key config                Show persisted settings
-  key config force on|off   Make \`key apply\` overwrite existing values by
-                            default (no need for -f every time)
-  key vault [location]      Show or change where the vault is stored:
-                            a file path or a database URL
-                            (sqlite://, postgres://, mysql://, mariadb://)
-
-Options:
-  --group, -g <group>       Vault group (default: .key file in the directory, else "default")
-  --env, -e <file>          Target file for apply/scan/diff (default: ./.env)
-  --from <file>             Template file for \`key apply all --from\`
-  --force, -f               key apply: overwrite variables that already have a
-                            value (by default they are skipped; make this the
-                            default with \`key config force on\`)
-  --safe, -s                key apply: skip variables that already have a value
-                            even when force apply is enabled
-  --copy, -c                key get: copy to clipboard instead of printing
-  --help, -h                Show this help
-
-Environment variables:
-  KEY_VAULT_PATH            Vault location: file path or database URL
-                            (default: ~/.config/key/vault.enc; also settable
-                            via \`key vault\`)
-  KEY_FORCE_APPLY           1/true or 0/false: overwrite existing values on
-                            \`key apply\` (overrides \`key config force\`)
-  KEY_SESSION_TTL           Session TTL in seconds (default: 900)
-  KEY_MIN_PASSWORD_LENGTH   Minimum vault password length (default: 8)
-`
+function help(u: Ui): string {
+  const row = (usage: string, desc: string) => `  ${u.cyan(usage.padEnd(24))}  ${desc}`
+  const cont = (desc: string) => `  ${' '.repeat(24)}  ${u.dim(desc)}`
+  const head = (title: string) => u.bold(title)
+  return [
+    `${u.bold(u.cyan('key'))} — encrypted .env manager`,
+    '',
+    head('Usage:'),
+    row('key', 'Open the TUI'),
+    row('key init', 'Create the vault'),
+    row('key apply <VAR|all>', 'Fill values into ./.env'),
+    row('key apply all --from F', 'Generate ./.env from a template (e.g. .env.example)'),
+    row('key run -- CMD [args]', "Run a command with the group's secrets as env vars"),
+    row('key scan', 'Import an existing ./.env into the vault'),
+    row('key diff', 'Show drift between ./.env and the vault (names only)'),
+    row('key set NAME', 'Store a secret (value via hidden prompt)'),
+    row('key get NAME [--copy]', "Print a secret's value (or copy it, auto-clears)"),
+    row('key list', 'List groups and names (never values)'),
+    row('key rm NAME', 'Remove a secret'),
+    row('key alias NAME', "List a secret's aliases"),
+    row('key alias add NAME A...', 'Add aliases (alternative names, same value)'),
+    row('key alias rm NAME A...', 'Remove aliases'),
+    row('key alias move NAME DEST', 'Turn NAME (and its aliases) into aliases of DEST'),
+    row('key share [GROUP]', 'Share a group as an encrypted QR code + one-time code'),
+    row('key import [PAYLOAD]', 'Import a shared group (asks for the one-time code)'),
+    row('key lock', 'End the session (ask for the password again)'),
+    row('key passwd', 'Change the vault password'),
+    row('key config', 'Show persisted settings'),
+    row('key config force on|off', 'Make `key apply` overwrite existing values by'),
+    cont('default (no need for -f every time)'),
+    row('key vault [location]', 'Show or change where the vault is stored:'),
+    cont('a file path or a database URL'),
+    cont('(sqlite://, postgres://, mysql://, mariadb://)'),
+    '',
+    head('Options:'),
+    row('--group, -g <group>', 'Vault group (default: .key file in the directory, else "default")'),
+    row('--env, -e <file>', 'Target file for apply/scan/diff (default: ./.env)'),
+    row('--from <file>', 'Template file for `key apply all --from`'),
+    row('--force, -f', 'key apply: overwrite variables that already have a'),
+    cont('value (by default they are skipped; make this the'),
+    cont('default with `key config force on`)'),
+    row('--safe, -s', 'key apply: skip variables that already have a value'),
+    cont('even when force apply is enabled'),
+    row('--copy, -c', 'key get: copy to clipboard instead of printing'),
+    row('--help, -h', 'Show this help'),
+    '',
+    head('Environment variables:'),
+    row('KEY_VAULT_PATH', 'Vault location: file path or database URL'),
+    cont('(default: ~/.config/key/vault.enc; also settable'),
+    cont('via `key vault`)'),
+    row('KEY_FORCE_APPLY', '1/true or 0/false: overwrite existing values on'),
+    cont('`key apply` (overrides `key config force`)'),
+    row('KEY_SESSION_TTL', 'Session TTL in seconds (default: 900)'),
+    row('KEY_MIN_PASSWORD_LENGTH', 'Minimum vault password length (default: 8)'),
+    '',
+  ].join('\n')
+}
 
 async function main(): Promise<void> {
   // Everything after `--` goes untouched to `key run` (the child command's
@@ -89,7 +97,7 @@ async function main(): Promise<void> {
   const [command, arg] = positionals
 
   if (values.help) {
-    console.log(HELP)
+    console.log(help(ui))
     return
   }
 
@@ -152,17 +160,17 @@ async function main(): Promise<void> {
       break
     case 'lock':
       vaultAccess.lock()
-      console.log('Session ended.')
+      console.log(ui.ok('Session ended.'))
       break
     case 'passwd':
       await cmdPasswd()
       break
     case 'help':
-      console.log(HELP)
+      console.log(help(ui))
       break
     default:
-      console.error(`Unknown command: ${command}\n`)
-      console.error(HELP)
+      console.error(uiErr.bad(`Unknown command: ${command}`) + '\n')
+      console.error(help(uiErr))
       process.exit(1)
   }
 }
@@ -173,9 +181,9 @@ main().catch((err) => {
     err instanceof VaultNotFoundError ||
     err instanceof VaultExistsError
   ) {
-    console.error(err.message)
+    console.error(uiErr.bad(err.message))
   } else if (err instanceof Error && err.message === 'canceled') {
-    console.error('Canceled.')
+    console.error(uiErr.dim('Canceled.'))
   } else {
     console.error(err)
   }
