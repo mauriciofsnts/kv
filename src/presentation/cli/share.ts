@@ -46,7 +46,7 @@ export async function cmdShare(groupArg: string | undefined, groupFlag?: string)
   console.log()
   console.log(`One-time code:  ${ui.bold(ui.yellow(code))}`)
   console.log()
-  console.log(ui.dim('On the other machine: `key import`, paste the payload, then type the code.'))
+  console.log(ui.dim('On the other machine: `kv import`, paste the payload, then type the code.'))
   console.log(ui.dim('Send the code through a different channel than the QR/payload.'))
 }
 

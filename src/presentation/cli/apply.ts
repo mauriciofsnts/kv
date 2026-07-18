@@ -27,20 +27,20 @@ function summarize({ applied, skipped, missing }: ApplyAllResult): string {
 export async function cmdApply(target: string | undefined, options: ApplyOptions): Promise<void> {
   if (!target) {
     console.error(
-      'Usage: key apply <VARIABLE|all> [--group group] [--env file] [--from template] [--force|--safe]',
+      'Usage: kv apply <VARIABLE|all> [--group group] [--env file] [--from template] [--force|--safe]',
     )
     process.exit(1)
   }
   const envFile = options.envFile ?? '.env'
   // --safe wins over everything; otherwise -f, falling back to the persisted
-  // default (`key config force on` / KEY_FORCE_APPLY).
+  // default (`kv config force on` / KV_FORCE_APPLY).
   const force = options.safe ? false : (options.force ?? config.forceApply())
 
   // Template mode: generate the target from e.g. .env.example instead of
   // patching it in place.
   if (options.from) {
     if (target !== 'all') {
-      console.error('The --from template mode applies all variables: key apply all --from <template>')
+      console.error('The --from template mode applies all variables: kv apply all --from <template>')
       process.exit(1)
     }
     if (!applyEnv.envFileExists(options.from)) {
@@ -74,7 +74,7 @@ export async function cmdApply(target: string | undefined, options: ApplyOptions
     const result = applyEnv.applyAll(vault, group, envFile, force)
     console.log(`${summarize(result)}${ui.group(group)}`)
     if (listSecrets(vault.data, group).length === 0) {
-      console.log(ui.dim(`Tip: group "${group}" is empty. Use \`key set NAME --group ${group}\`.`))
+      console.log(ui.dim(`Tip: group "${group}" is empty. Use \`kv set NAME --group ${group}\`.`))
     }
     return
   }

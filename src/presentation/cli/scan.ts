@@ -3,7 +3,7 @@ import { confirmPrompt } from './prompt.ts'
 import { ui, uiErr } from './ui.ts'
 import { resolveGroup, unlockVault } from './unlock.ts'
 
-// key scan [--env file] [-g group]: import the variables of an existing
+// kv scan [--env file] [-g group]: import the variables of an existing
 // .env into the vault. Prints names and statuses only, never values.
 export async function cmdScan(groupFlag?: string, envFlag?: string): Promise<void> {
   const envFile = envFlag ?? '.env'

@@ -148,7 +148,7 @@ export function createGroup(data: VaultData, group: string): void {
 }
 
 // Environment variable map for a group: canonical names plus every alias,
-// all pointing at the secret's value — what `key run` injects.
+// all pointing at the secret's value — what `kv run` injects.
 export function groupEnvMap(data: VaultData, group: string): Record<string, string> {
   const map: Record<string, string> = {}
   for (const [name, secret] of Object.entries(data.groups[group] ?? {})) {

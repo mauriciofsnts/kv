@@ -50,7 +50,7 @@ describe('share/import', () => {
 
     const { payload, code, names } = share.createShare(vault, DEFAULT_GROUP)
     expect(names.sort()).toEqual(['API_KEY', 'DATABASE_URL'])
-    expect(payload.startsWith('keyshare1:')).toBe(true)
+    expect(payload.startsWith('kvshare1:')).toBe(true)
     expect(code).toMatch(/^[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}$/)
 
     const decoded = share.decodeShare(payload, code)
@@ -86,8 +86,18 @@ describe('share/import', () => {
 
   test('garbage payloads are rejected', async () => {
     const { share } = testbed
-    expect(() => share.decodeShare('not-a-share', 'AAAA')).toThrow('Not a key share payload')
-    expect(() => share.decodeShare('keyshare1:AAAA', 'AAAA')).toThrow('truncated')
+    expect(() => share.decodeShare('not-a-share', 'AAAA')).toThrow('Not a kv share payload')
+    expect(() => share.decodeShare('kvshare1:AAAA', 'AAAA')).toThrow('truncated')
+  })
+
+  test('legacy keyshare1 payloads still import', async () => {
+    const { access, share } = testbed
+    const vault = await access.initVault('password-123')
+    setSecret(vault.data, DEFAULT_GROUP, 'A', '1')
+    const { payload, code } = share.createShare(vault, DEFAULT_GROUP)
+
+    const legacy = payload.replace(/^kvshare1:/, 'keyshare1:')
+    expect(share.decodeShare(legacy, code).secrets['A']?.value).toBe('1')
   })
 
   test('empty or missing group cannot be shared', async () => {

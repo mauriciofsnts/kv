@@ -7,10 +7,10 @@ import pkg from '../package.json'
 const version = process.argv[2] ?? pkg.version
 
 const targets = [
-  { target: 'bun-linux-x64', name: 'key-linux-x64' },
-  { target: 'bun-linux-arm64', name: 'key-linux-arm64' },
-  { target: 'bun-darwin-x64', name: 'key-darwin-x64' },
-  { target: 'bun-darwin-arm64', name: 'key-darwin-arm64' },
+  { target: 'bun-linux-x64', name: 'kv-linux-x64' },
+  { target: 'bun-linux-arm64', name: 'kv-linux-arm64' },
+  { target: 'bun-darwin-x64', name: 'kv-darwin-x64' },
+  { target: 'bun-darwin-arm64', name: 'kv-darwin-arm64' },
 ]
 
 await $`rm -rf dist/release`
