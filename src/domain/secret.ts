@@ -115,6 +115,27 @@ export function removeAliases(
   return removed
 }
 
+// Deletes `source` and re-registers its name — plus everything that aliased
+// it — as aliases of `target`, so every old name keeps resolving. `source`'s
+// value is discarded by design; confirming that is the caller's job.
+export function mergeAsAlias(
+  data: VaultData,
+  group: string,
+  source: string,
+  target: string,
+): string[] {
+  const sourceSecret = getSecret(data, group, source)
+  if (!sourceSecret) throw new Error(`"${source}" does not exist in group "${group}".`)
+  const resolved = resolveSecret(data, group, target)
+  if (!resolved) throw new Error(`"${target}" does not exist in group "${group}".`)
+  if (resolved.name === source) throw new Error(`Cannot move "${source}" onto itself.`)
+  const moved = [source, ...(sourceSecret.aliases ?? [])]
+  removeSecret(data, group, source)
+  resolved.secret.aliases = [...(resolved.secret.aliases ?? []), ...moved]
+  resolved.secret.updatedAt = new Date().toISOString()
+  return moved
+}
+
 export function removeSecret(data: VaultData, group: string, name: string): boolean {
   const groupSecrets = data.groups[group]
   if (!groupSecrets || !(name in groupSecrets)) return false

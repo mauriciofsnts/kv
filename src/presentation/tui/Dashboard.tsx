@@ -151,6 +151,7 @@ function SecretList({ width, height }: PanelProps) {
       {mode === 'filter' ? <FilterInput width={innerWidth} /> : null}
       {mode === 'confirm-delete' ? <ConfirmDelete width={innerWidth} names={secrets.map(([n]) => n)} /> : null}
       {mode === 'new-group' ? <NewGroupInput width={innerWidth} /> : null}
+      {mode === 'move' ? <MoveTarget width={innerWidth} names={secrets.map(([n]) => n)} /> : null}
     </box>
   )
 }
@@ -173,7 +174,7 @@ function BrowseKeymap({ count, names }: { count: number; names: string[] }) {
     const next = groups[(current + offset + groups.length) % groups.length]
     if (next) s.setGroup(next)
   }
-  const setMode = (mode: 'add' | 'edit' | 'confirm-delete' | 'filter' | 'new-group') =>
+  const setMode = (mode: 'add' | 'edit' | 'confirm-delete' | 'filter' | 'new-group' | 'move') =>
     useTuiStore.getState().setMode(mode)
 
   useKeymap([
@@ -206,6 +207,18 @@ function BrowseKeymap({ count, names }: { count: number; names: string[] }) {
           .catch((err: unknown) =>
             s.setStatus(`✗ ${err instanceof Error ? err.message : String(err)}`),
           )
+      },
+    },
+    {
+      key: 'm',
+      action: () => {
+        // Needs at least a source and one other secret to move onto.
+        if (count < 2) return
+        const s = useTuiStore.getState()
+        const name = names[s.selected]
+        if (!name) return
+        s.setMoveSource(name)
+        s.setMode('move')
       },
     },
     { key: '/', action: () => setMode('filter') },
@@ -299,13 +312,96 @@ function NewGroupInput({ width }: { width: number }) {
   return <text height={1} width={width} color="yellow">new group: {name}▏ (Enter creates, Esc cancels)</text>
 }
 
+// Move-as-alias flow: ↑↓ pick the target, Enter asks to confirm, y applies.
+// The source's value is discarded (the target's wins); the confirm line warns
+// when that actually loses data. Handlers read state via getState()/refs —
+// 0.1.7 keyboard handlers can retain closures from old renders — and the
+// component (with its input hook) only exists while mode === 'move'.
+function MoveTarget({ width, names }: { width: number; names: string[] }) {
+  const [confirming, setConfirming] = useState(false)
+  const confirmingRef = useRef(false)
+  confirmingRef.current = confirming
+  const source = useTuiStore((s) => s.moveSource)
+  const selected = useTuiStore((s) => s.selected)
+  const vault = useTuiStore((s) => s.vault)
+  const group = useTuiStore((s) => s.group)
+
+  const apply = () => {
+    const s = useTuiStore.getState()
+    const target = names[s.selected]
+    if (s.vault && s.moveSource && target) {
+      manageSecrets
+        .mergeAsAlias(s.vault, s.group, s.moveSource, target)
+        .then(({ target: canonical, moved }) => {
+          const st = useTuiStore.getState()
+          st.setStatus(`✓ ${moved.join(', ')} → ${canonical}`)
+          st.setSelected(0)
+        })
+        .catch(reportSaveError)
+    }
+    s.setMoveSource(null)
+    s.setMode('browse')
+  }
+
+  useInput((key: string) => {
+    const s = useTuiStore.getState()
+    if (key === 'escape' || key === 'esc') {
+      if (confirmingRef.current) {
+        setConfirming(false)
+        return
+      }
+      s.setMoveSource(null)
+      s.setMode('browse')
+      return
+    }
+    if (confirmingRef.current) {
+      if (key === 'y') apply()
+      else if (key === 'n') setConfirming(false)
+      return
+    }
+    if ((key === 'up' || key === 'k') && names.length > 0) {
+      s.setSelected((s.selected - 1 + names.length) % names.length)
+      return
+    }
+    if ((key === 'down' || key === 'j') && names.length > 0) {
+      s.setSelected((s.selected + 1) % names.length)
+      return
+    }
+    if (key === 'enter' || key === 'return') {
+      const target = names[s.selected]
+      if (!target || target === s.moveSource) {
+        s.setStatus('✗ pick a different secret as the target')
+        return
+      }
+      setConfirming(true)
+    }
+  })
+
+  const target = names[selected]
+  if (confirming && source && target) {
+    const valuesDiffer =
+      vault &&
+      getSecret(vault.data, group, source)?.value !== getSecret(vault.data, group, target)?.value
+    return (
+      <text height={1} width={width} color="red">
+        {source} becomes an alias of {target}{valuesDiffer ? ' — values differ, its value is discarded' : ''}. [y/n]
+      </text>
+    )
+  }
+  return (
+    <text height={1} width={width} color="yellow">
+      move: {source} → {target ?? '?'} (↑↓ target · Enter confirm · Esc cancel)
+    </text>
+  )
+}
+
 function Footer({ width }: { width?: number }) {
   const status = useTuiStore((s) => s.status)
   return (
     <box flexDirection="column" height={2} width={width}>
       <text height={1} width={width} color="green">{status || ' '}</text>
       <text height={1} width={width} dim>
-        ↑↓ move · ←→ group · a add · e edit · d delete · v reveal · c copy · / search · g new group · q quit
+        ↑↓ move · ←→ group · a add · e edit · d delete · v reveal · c copy · m alias · / search · g new group · q quit
       </text>
     </box>
   )

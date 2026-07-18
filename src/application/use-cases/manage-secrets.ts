@@ -5,9 +5,11 @@ import {
   addAliases,
   createGroup,
   getSecret,
+  mergeAsAlias,
   ownerOfName,
   removeAliases,
   removeSecret,
+  resolveSecret,
   setSecret,
 } from '../../domain/secret.ts'
 import type { Vault } from '../vault.ts'
@@ -27,6 +29,15 @@ export interface ImportPlan {
   replace: string[]
   unchanged: string[]
   conflicts: { name: string; owner: string }[]
+}
+
+export interface MergePlan {
+  // Canonical name of the target (it may have been given by one of its aliases).
+  target: string
+  // The source's value will be discarded; true when that actually loses data.
+  valuesDiffer: boolean
+  // The source's own aliases, which follow it onto the target.
+  aliasesToMove: string[]
 }
 
 export function makeManageSecrets(access: Pick<VaultAccess, 'saveVault'>) {
@@ -99,6 +110,40 @@ export function makeManageSecrets(access: Pick<VaultAccess, 'saveVault'>) {
       const removed = removeAliases(vault.data, group, name, aliases)
       if (removed.length > 0) await access.saveVault(vault)
       return removed
+    },
+
+    // Classifies a "move as alias" without touching anything, so the caller
+    // can confirm (especially the value loss) before mergeAsAlias applies it.
+    planMerge(vault: Vault, group: string, source: string, target: string): MergePlan {
+      const sourceSecret = getSecret(vault.data, group, source)
+      if (!sourceSecret) {
+        const owner = ownerOfName(vault.data, group, source)
+        throw new Error(
+          owner
+            ? `"${source}" is an alias of "${owner}" — only canonical names can be moved.`
+            : `"${source}" does not exist in group "${group}".`,
+        )
+      }
+      const resolved = resolveSecret(vault.data, group, target)
+      if (!resolved) throw new Error(`"${target}" does not exist in group "${group}".`)
+      if (resolved.name === source) throw new Error(`Cannot move "${source}" onto itself.`)
+      return {
+        target: resolved.name,
+        valuesDiffer: resolved.secret.value !== sourceSecret.value,
+        aliasesToMove: [...(sourceSecret.aliases ?? [])],
+      }
+    },
+
+    async mergeAsAlias(
+      vault: Vault,
+      group: string,
+      source: string,
+      target: string,
+    ): Promise<{ target: string; moved: string[] }> {
+      const plan = this.planMerge(vault, group, source, target)
+      const moved = mergeAsAlias(vault.data, group, source, plan.target)
+      await access.saveVault(vault)
+      return { target: plan.target, moved }
     },
 
     async createGroup(vault: Vault, group: string): Promise<void> {

@@ -12,6 +12,7 @@ import {
   getSecret,
   listGroups,
   listSecrets,
+  mergeAsAlias,
   ownerOfName,
   removeAliases,
   removeGroup,
@@ -291,5 +292,88 @@ describe('domain: aliases', () => {
     expect(getSecret(data, DEFAULT_GROUP, 'A')?.aliases).toEqual(['C'])
     setSecret(data, DEFAULT_GROUP, 'A', '4', undefined, [])
     expect(getSecret(data, DEFAULT_GROUP, 'A')?.aliases).toBeUndefined()
+  })
+
+  test('mergeAsAlias folds a secret (and its aliases) into another', () => {
+    const data = fresh()
+    setSecret(data, DEFAULT_GROUP, 'DATABASE_URL', 'postgres://x')
+    setSecret(data, DEFAULT_GROUP, 'DB_URL', 'postgres://old')
+    addAliases(data, DEFAULT_GROUP, 'DB_URL', ['POSTGRES_URL'])
+
+    const moved = mergeAsAlias(data, DEFAULT_GROUP, 'DB_URL', 'DATABASE_URL')
+    expect(moved).toEqual(['DB_URL', 'POSTGRES_URL'])
+    expect(getSecret(data, DEFAULT_GROUP, 'DB_URL')).toBeUndefined()
+    expect(getSecret(data, DEFAULT_GROUP, 'DATABASE_URL')?.aliases).toEqual([
+      'DB_URL',
+      'POSTGRES_URL',
+    ])
+    // Every old name resolves to the target's value now.
+    expect(resolveSecret(data, DEFAULT_GROUP, 'DB_URL')?.secret.value).toBe('postgres://x')
+    expect(resolveSecret(data, DEFAULT_GROUP, 'POSTGRES_URL')?.name).toBe('DATABASE_URL')
+  })
+
+  test('mergeAsAlias resolves the target through an alias and rejects self-moves', () => {
+    const data = fresh()
+    setSecret(data, DEFAULT_GROUP, 'DATABASE_URL', 'x')
+    addAliases(data, DEFAULT_GROUP, 'DATABASE_URL', ['PG_URL'])
+    setSecret(data, DEFAULT_GROUP, 'DB_URL', 'y')
+
+    expect(() => mergeAsAlias(data, DEFAULT_GROUP, 'DATABASE_URL', 'PG_URL')).toThrow(
+      'onto itself',
+    )
+    expect(() => mergeAsAlias(data, DEFAULT_GROUP, 'MISSING', 'DATABASE_URL')).toThrow(
+      'does not exist',
+    )
+
+    mergeAsAlias(data, DEFAULT_GROUP, 'DB_URL', 'PG_URL')
+    expect(getSecret(data, DEFAULT_GROUP, 'DATABASE_URL')?.aliases).toEqual(['PG_URL', 'DB_URL'])
+  })
+})
+
+describe('alias move use case', () => {
+  test('planMerge classifies without mutating', async () => {
+    const { access, secrets } = testbed
+    const vault = await access.initVault('password-123')
+    await secrets.saveSecret(vault, DEFAULT_GROUP, {
+      name: 'DB_URL',
+      value: 'old',
+      aliases: ['POSTGRES_URL'],
+    })
+    await secrets.saveSecret(vault, DEFAULT_GROUP, { name: 'DATABASE_URL', value: 'new' })
+
+    const plan = secrets.planMerge(vault, DEFAULT_GROUP, 'DB_URL', 'DATABASE_URL')
+    expect(plan).toEqual({
+      target: 'DATABASE_URL',
+      valuesDiffer: true,
+      aliasesToMove: ['POSTGRES_URL'],
+    })
+    expect(getSecret(vault.data, DEFAULT_GROUP, 'DB_URL')?.value).toBe('old')
+
+    expect(() => secrets.planMerge(vault, DEFAULT_GROUP, 'POSTGRES_URL', 'DATABASE_URL')).toThrow(
+      'is an alias of "DB_URL"',
+    )
+    expect(() => secrets.planMerge(vault, DEFAULT_GROUP, 'DB_URL', 'MISSING')).toThrow(
+      'does not exist',
+    )
+  })
+
+  test('mergeAsAlias applies and persists', async () => {
+    const { access, secrets } = testbed
+    const vault = await access.initVault('password-123')
+    await secrets.saveSecret(vault, DEFAULT_GROUP, { name: 'DB_URL', value: 'old' })
+    await secrets.saveSecret(vault, DEFAULT_GROUP, { name: 'DATABASE_URL', value: 'new' })
+
+    const { target, moved } = await secrets.mergeAsAlias(
+      vault,
+      DEFAULT_GROUP,
+      'DB_URL',
+      'DATABASE_URL',
+    )
+    expect(target).toBe('DATABASE_URL')
+    expect(moved).toEqual(['DB_URL'])
+
+    const reopened = await access.openWithPassword('password-123')
+    expect(getSecret(reopened.data, DEFAULT_GROUP, 'DB_URL')).toBeUndefined()
+    expect(resolveSecret(reopened.data, DEFAULT_GROUP, 'DB_URL')?.secret.value).toBe('new')
   })
 })
