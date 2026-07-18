@@ -15,6 +15,8 @@ bun test -t "aliases"          # filter by test name
 bunx tsc --noEmit              # typecheck (also: bun run typecheck)
 bun run src/index.ts …         # run the CLI without linking
 bun link                       # put `key` on PATH (~/.bun/bin/key)
+bun run build                  # single-file binary → dist/key (bun build --compile)
+bun run build:release          # cross-compiled tarballs → dist/release/
 ```
 
 ## Architecture (Clean Architecture)
