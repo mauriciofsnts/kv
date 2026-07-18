@@ -8,7 +8,7 @@ import { cmdInit } from './presentation/cli/init.ts'
 import { cmdRun } from './presentation/cli/run.ts'
 import { cmdScan } from './presentation/cli/scan.ts'
 import { cmdAlias, cmdGet, cmdList, cmdPasswd, cmdRm, cmdSet } from './presentation/cli/secrets.ts'
-import { cmdComplete, cmdCompletions } from './presentation/cli/completions.ts'
+import { cmdComplete } from './presentation/cli/completions.ts'
 import { cmdImport, cmdShare } from './presentation/cli/share.ts'
 import { cmdVault } from './presentation/cli/vaultcmd.ts'
 
@@ -31,7 +31,6 @@ Usage:
   key alias rm NAME A...    Remove aliases
   key share [GROUP]         Share a group as an encrypted QR code + one-time code
   key import [PAYLOAD]      Import a shared group (asks for the one-time code)
-  key completions SHELL     Print shell completions (zsh, bash or fish)
   key lock                  End the session (ask for the password again)
   key passwd                Change the vault password
   key vault [location]      Show or change where the vault is stored:
@@ -132,9 +131,6 @@ async function main(): Promise<void> {
       break
     case 'import':
       await cmdImport(arg, values.group)
-      break
-    case 'completions':
-      cmdCompletions(arg)
       break
     case '__complete':
       await cmdComplete(arg, values.group)
