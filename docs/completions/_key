@@ -1,0 +1,99 @@
+#compdef key
+
+_key_groups() {
+  local -a groups
+  groups=(${(f)"$(command key __complete groups 2>/dev/null)"})
+  (( $#groups )) && _describe -t groups 'group' groups
+}
+
+_key_names() {
+  local -a names fwd
+  local i
+  for ((i = 1; i <= $#words; i++)); do
+    if [[ $words[i] == -g || $words[i] == --group ]]; then
+      fwd=(--group "$words[i+1]")
+    fi
+  done
+  names=(${(f)"$(command key __complete names $fwd 2>/dev/null)"})
+  (( $#names )) && _describe -t secrets 'secret' names
+}
+
+_key_apply_targets() {
+  local -a names
+  _key_names
+  names=(all)
+  _describe -t targets 'target' names
+}
+
+_key() {
+  local curcontext="$curcontext" state line
+  typeset -A opt_args
+
+  local -a group_opt env_opt
+  group_opt=('(-g --group)'{-g,--group}'[vault group]:group:_key_groups')
+  env_opt=('(-e --env)'{-e,--env}'[target .env file]:file:_files')
+
+  _arguments -C \
+    '(-h --help)'{-h,--help}'[show help]' \
+    '1:command:->cmds' \
+    '*::arg:->args' && return
+
+  case $state in
+    cmds)
+      local -a commands
+      commands=(
+        'init:Create the vault'
+        'apply:Fill values into ./.env'
+        'run:Run a command with secrets as env vars'
+        'scan:Import an existing ./.env into the vault'
+        'diff:Show drift between ./.env and the vault'
+        'set:Store a secret'
+        'get:Print a secret value'
+        'list:List groups and names'
+        'rm:Remove a secret'
+        'alias:Manage alternative names'
+        'share:Share a group as an encrypted QR code'
+        'import:Import a shared group'
+        'lock:End the session'
+        'passwd:Change the vault password'
+        'vault:Show or change where the vault is stored'
+        'help:Show help'
+      )
+      _describe -t commands 'command' commands
+      ;;
+    args)
+      case $words[1] in
+        apply)
+          _arguments $group_opt $env_opt \
+            '--from[template file]:file:_files' \
+            '(-f --force)'{-f,--force}'[overwrite variables that already have a value]' \
+            '1:variable:_key_apply_targets'
+          ;;
+        get)
+          _arguments $group_opt \
+            '(-c --copy)'{-c,--copy}'[copy to clipboard]' \
+            '1:secret:_key_names'
+          ;;
+        set|rm)
+          _arguments $group_opt '1:secret:_key_names'
+          ;;
+        alias)
+          _arguments $group_opt \
+            '1:action:(add rm)' \
+            '*:secret:_key_names'
+          ;;
+        scan|diff)
+          _arguments $group_opt $env_opt
+          ;;
+        run|list)
+          _arguments $group_opt
+          ;;
+        share|import)
+          _arguments $group_opt '1:group:_key_groups'
+          ;;
+      esac
+      ;;
+  esac
+}
+
+_key "$@"
