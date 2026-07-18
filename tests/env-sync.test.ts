@@ -25,6 +25,8 @@ function makeTestbed() {
     setVaultLocation() {},
     locationOverridden: () => false,
     minPasswordLength: () => 8,
+    forceApply: () => false,
+    setForceApply: () => {},
   }
   const access = makeVaultAccess({ crypto: nodeCrypto, sessions, config, repositoryFor })
   return { access, secrets: makeManageSecrets(access), applyEnv: makeApplyEnv(fsEnvFiles) }

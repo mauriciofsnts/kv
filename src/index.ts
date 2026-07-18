@@ -9,6 +9,7 @@ import { cmdRun } from './presentation/cli/run.ts'
 import { cmdScan } from './presentation/cli/scan.ts'
 import { cmdAlias, cmdGet, cmdList, cmdPasswd, cmdRm, cmdSet } from './presentation/cli/secrets.ts'
 import { cmdComplete } from './presentation/cli/completions.ts'
+import { cmdConfig } from './presentation/cli/configcmd.ts'
 import { cmdImport, cmdShare } from './presentation/cli/share.ts'
 import { cmdVault } from './presentation/cli/vaultcmd.ts'
 
@@ -34,6 +35,9 @@ Usage:
   key import [PAYLOAD]      Import a shared group (asks for the one-time code)
   key lock                  End the session (ask for the password again)
   key passwd                Change the vault password
+  key config                Show persisted settings
+  key config force on|off   Make \`key apply\` overwrite existing values by
+                            default (no need for -f every time)
   key vault [location]      Show or change where the vault is stored:
                             a file path or a database URL
                             (sqlite://, postgres://, mysql://, mariadb://)
@@ -43,7 +47,10 @@ Options:
   --env, -e <file>          Target file for apply/scan/diff (default: ./.env)
   --from <file>             Template file for \`key apply all --from\`
   --force, -f               key apply: overwrite variables that already have a
-                            value (by default they are skipped)
+                            value (by default they are skipped; make this the
+                            default with \`key config force on\`)
+  --safe, -s                key apply: skip variables that already have a value
+                            even when force apply is enabled
   --copy, -c                key get: copy to clipboard instead of printing
   --help, -h                Show this help
 
@@ -51,6 +58,8 @@ Environment variables:
   KEY_VAULT_PATH            Vault location: file path or database URL
                             (default: ~/.config/key/vault.enc; also settable
                             via \`key vault\`)
+  KEY_FORCE_APPLY           1/true or 0/false: overwrite existing values on
+                            \`key apply\` (overrides \`key config force\`)
   KEY_SESSION_TTL           Session TTL in seconds (default: 900)
   KEY_MIN_PASSWORD_LENGTH   Minimum vault password length (default: 8)
 `
@@ -70,6 +79,7 @@ async function main(): Promise<void> {
       env: { type: 'string', short: 'e' },
       from: { type: 'string' },
       force: { type: 'boolean', short: 'f' },
+      safe: { type: 'boolean', short: 's' },
       copy: { type: 'boolean', short: 'c' },
       help: { type: 'boolean', short: 'h' },
     },
@@ -98,6 +108,7 @@ async function main(): Promise<void> {
         envFile: values.env,
         from: values.from,
         force: values.force,
+        safe: values.safe,
       })
       break
     case 'run':
@@ -123,6 +134,9 @@ async function main(): Promise<void> {
       break
     case 'alias':
       await cmdAlias(positionals.slice(1), values.group)
+      break
+    case 'config':
+      await cmdConfig(positionals.slice(1))
       break
     case 'vault':
       await cmdVault(arg)

@@ -56,6 +56,7 @@ _key() {
         'import:Import a shared group'
         'lock:End the session'
         'passwd:Change the vault password'
+        'config:Show or change persisted settings'
         'vault:Show or change where the vault is stored'
         'help:Show help'
       )
@@ -67,6 +68,7 @@ _key() {
           _arguments $group_opt $env_opt \
             '--from[template file]:file:_files' \
             '(-f --force)'{-f,--force}'[overwrite variables that already have a value]' \
+            '(-s --safe)'{-s,--safe}'[skip variables that already have a value]' \
             '1:variable:_key_apply_targets'
           ;;
         get)
@@ -90,6 +92,9 @@ _key() {
           ;;
         share|import)
           _arguments $group_opt '1:group:_key_groups'
+          ;;
+        config)
+          _arguments '1:setting:(force)' '2:value:(on off)'
           ;;
       esac
       ;;
