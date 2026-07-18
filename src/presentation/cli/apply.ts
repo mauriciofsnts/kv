@@ -2,6 +2,7 @@ import type { ApplyAllResult } from '../../application/use-cases/apply-env.ts'
 import { applyEnv } from '../../composition.ts'
 import { listSecrets } from '../../domain/secret.ts'
 import { confirmPrompt } from './prompt.ts'
+import { ui, uiErr } from './ui.ts'
 import { resolveGroup, unlockVault } from './unlock.ts'
 
 interface ApplyOptions {
@@ -12,12 +13,14 @@ interface ApplyOptions {
 }
 
 function summarize({ applied, skipped, missing }: ApplyAllResult): string {
-  const parts = [`✓ ${applied.length} applied`]
+  const parts = [ui.ok(`${applied.length} applied`)]
   if (skipped.length > 0) {
-    parts.push(`↷ ${skipped.length} already set, use -f to overwrite (${skipped.join(', ')})`)
+    parts.push(ui.skip(`${skipped.length} already set, use -f to overwrite ${ui.dim(`(${skipped.join(', ')})`)}`))
   }
-  if (missing.length > 0) parts.push(`− ${missing.length} missing from vault (${missing.join(', ')})`)
-  return parts.join(' · ')
+  if (missing.length > 0) {
+    parts.push(ui.minus(`${missing.length} missing from vault ${ui.dim(`(${missing.join(', ')})`)}`))
+  }
+  return parts.join(ui.dim(' · '))
 }
 
 export async function cmdApply(target: string | undefined, options: ApplyOptions): Promise<void> {
@@ -37,48 +40,48 @@ export async function cmdApply(target: string | undefined, options: ApplyOptions
       process.exit(1)
     }
     if (!applyEnv.envFileExists(options.from)) {
-      console.error(`Template ${options.from} not found.`)
+      console.error(uiErr.bad(`Template ${options.from} not found.`))
       process.exit(1)
     }
     const vault = await unlockVault()
     const group = resolveGroup(options.group)
     if (!(group in vault.data.groups)) {
-      console.error(`Group "${group}" does not exist in the vault.`)
+      console.error(uiErr.bad(`Group "${group}" does not exist in the vault.`))
       process.exit(1)
     }
     const result = applyEnv.applyTemplate(vault, group, options.from, envFile, options.force)
-    console.log(`${summarize(result)} → wrote ${envFile} from ${options.from} [group: ${group}]`)
+    console.log(`${summarize(result)} → wrote ${ui.bold(envFile)} from ${options.from}${ui.group(group)}`)
     return
   }
 
   if (!applyEnv.envFileExists(envFile)) {
-    console.error(`File ${envFile} not found.`)
+    console.error(uiErr.bad(`File ${envFile} not found.`))
     process.exit(1)
   }
 
   const vault = await unlockVault()
   const group = resolveGroup(options.group)
   if (!(group in vault.data.groups)) {
-    console.error(`Group "${group}" does not exist in the vault.`)
+    console.error(uiErr.bad(`Group "${group}" does not exist in the vault.`))
     process.exit(1)
   }
 
   if (target === 'all') {
     const result = applyEnv.applyAll(vault, group, envFile, options.force)
-    console.log(`${summarize(result)} [group: ${group}]`)
+    console.log(`${summarize(result)}${ui.group(group)}`)
     if (listSecrets(vault.data, group).length === 0) {
-      console.log(`Tip: group "${group}" is empty. Use \`key set NAME --group ${group}\`.`)
+      console.log(ui.dim(`Tip: group "${group}" is empty. Use \`key set NAME --group ${group}\`.`))
     }
     return
   }
 
   const result = applyEnv.applyOne(vault, group, target, envFile, options.force)
   if (result === 'applied') {
-    console.log(`✓ ${target} applied to ${envFile} [group: ${group}]`)
+    console.log(ui.ok(`${ui.bold(target)} applied to ${envFile}`) + ui.group(group))
     return
   }
   if (result === 'skipped') {
-    console.log(`↷ ${target} already has a value in ${envFile} — use -f to overwrite.`)
+    console.log(ui.skip(`${ui.bold(target)} already has a value in ${envFile} — use -f to overwrite.`))
     return
   }
 
@@ -86,9 +89,9 @@ export async function cmdApply(target: string | undefined, options: ApplyOptions
     `"${target}" is not in ${envFile}. Append it at the end?`,
   )
   if (!shouldAppend) {
-    console.log('Nothing changed.')
+    console.log(ui.dim('Nothing changed.'))
     return
   }
   applyEnv.appendOne(vault, group, target, envFile)
-  console.log(`✓ ${target} appended to ${envFile} [group: ${group}]`)
+  console.log(ui.ok(`${ui.bold(target)} appended to ${envFile}`) + ui.group(group))
 }
