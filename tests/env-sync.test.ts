@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { ConfigStore, SessionCache } from '../src/application/ports.ts'
@@ -181,6 +181,8 @@ describe('applyTemplate use case', () => {
     expect(result.missing).toEqual(['UNKNOWN'])
     expect(readFileSync(target, 'utf8')).toBe('# header\nDB=real\nUNKNOWN=keep\n')
     expect(readFileSync(template, 'utf8')).toBe(templateContent)
+    // A freshly created target holds plaintext secrets — owner-only access.
+    expect(statSync(target).mode & 0o777).toBe(0o600)
   })
 
   test('safe mode keeps non-empty values already in the target', async () => {

@@ -133,6 +133,22 @@ describe('vault access', () => {
     const reopened = await access.openWithPassword('new-password')
     expect(getSecret(reopened.data, DEFAULT_GROUP, 'A')?.value).toBe('1')
   })
+
+  test('changePassword also rekeys the .bak backup', async () => {
+    const { access } = testbed
+    const vault = await access.initVault('old-password')
+    setSecret(vault.data, DEFAULT_GROUP, 'A', '1')
+    await access.saveVault(vault)
+    await access.changePassword(vault, 'new-password')
+
+    // The backup must not remain decryptable with the compromised password.
+    const backup = makeTestbed(() => path + '.bak')
+    await expect(backup.access.openWithPassword('old-password')).rejects.toThrow(
+      WrongPasswordError,
+    )
+    const reopened = await backup.access.openWithPassword('new-password')
+    expect(getSecret(reopened.data, DEFAULT_GROUP, 'A')?.value).toBe('1')
+  })
 })
 
 describe('manage secrets use cases', () => {
