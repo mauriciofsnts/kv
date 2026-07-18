@@ -83,6 +83,8 @@ describe('sqlite repository', () => {
       setVaultLocation() {},
       locationOverridden: () => false,
       minPasswordLength: () => 8,
+    forceApply: () => false,
+    setForceApply: () => {},
     }
     const access = makeVaultAccess({ crypto: nodeCrypto, sessions, config, repositoryFor })
 
