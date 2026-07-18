@@ -1,5 +1,5 @@
 import type { ApplyAllResult } from '../../application/use-cases/apply-env.ts'
-import { applyEnv } from '../../composition.ts'
+import { applyEnv, config } from '../../composition.ts'
 import { listSecrets } from '../../domain/secret.ts'
 import { confirmPrompt } from './prompt.ts'
 import { resolveGroup, unlockVault } from './unlock.ts'
@@ -9,6 +9,7 @@ interface ApplyOptions {
   envFile?: string
   from?: string
   force?: boolean
+  safe?: boolean
 }
 
 function summarize({ applied, skipped, missing }: ApplyAllResult): string {
@@ -23,11 +24,14 @@ function summarize({ applied, skipped, missing }: ApplyAllResult): string {
 export async function cmdApply(target: string | undefined, options: ApplyOptions): Promise<void> {
   if (!target) {
     console.error(
-      'Usage: key apply <VARIABLE|all> [--group group] [--env file] [--from template] [--force]',
+      'Usage: key apply <VARIABLE|all> [--group group] [--env file] [--from template] [--force|--safe]',
     )
     process.exit(1)
   }
   const envFile = options.envFile ?? '.env'
+  // --safe wins over everything; otherwise -f, falling back to the persisted
+  // default (`key config force on` / KEY_FORCE_APPLY).
+  const force = options.safe ? false : (options.force ?? config.forceApply())
 
   // Template mode: generate the target from e.g. .env.example instead of
   // patching it in place.
@@ -46,7 +50,7 @@ export async function cmdApply(target: string | undefined, options: ApplyOptions
       console.error(`Group "${group}" does not exist in the vault.`)
       process.exit(1)
     }
-    const result = applyEnv.applyTemplate(vault, group, options.from, envFile, options.force)
+    const result = applyEnv.applyTemplate(vault, group, options.from, envFile, force)
     console.log(`${summarize(result)} → wrote ${envFile} from ${options.from} [group: ${group}]`)
     return
   }
@@ -64,7 +68,7 @@ export async function cmdApply(target: string | undefined, options: ApplyOptions
   }
 
   if (target === 'all') {
-    const result = applyEnv.applyAll(vault, group, envFile, options.force)
+    const result = applyEnv.applyAll(vault, group, envFile, force)
     console.log(`${summarize(result)} [group: ${group}]`)
     if (listSecrets(vault.data, group).length === 0) {
       console.log(`Tip: group "${group}" is empty. Use \`key set NAME --group ${group}\`.`)
@@ -72,7 +76,7 @@ export async function cmdApply(target: string | undefined, options: ApplyOptions
     return
   }
 
-  const result = applyEnv.applyOne(vault, group, target, envFile, options.force)
+  const result = applyEnv.applyOne(vault, group, target, envFile, force)
   if (result === 'applied') {
     console.log(`✓ ${target} applied to ${envFile} [group: ${group}]`)
     return
