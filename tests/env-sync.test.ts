@@ -104,6 +104,67 @@ describe('diff use case', () => {
   })
 })
 
+describe('applyAll use case', () => {
+  test('safe mode skips variables that already hold a different value', async () => {
+    const { access, applyEnv } = makeTestbed()
+    const vault = await access.initVault('password-123')
+    setSecret(vault.data, DEFAULT_GROUP, 'EMPTY', 'filled')
+    setSecret(vault.data, DEFAULT_GROUP, 'TAKEN', 'vault-value')
+    setSecret(vault.data, DEFAULT_GROUP, 'SAME', 'v1')
+
+    const envPath = join(dir, '.env')
+    writeFileSync(envPath, 'EMPTY=\nTAKEN=local-value\nSAME=v1\nUNKNOWN=x\n')
+
+    const result = applyEnv.applyAll(vault, DEFAULT_GROUP, envPath)
+    expect(result.applied.sort()).toEqual(['EMPTY', 'SAME'])
+    expect(result.skipped).toEqual(['TAKEN'])
+    expect(result.missing).toEqual(['UNKNOWN'])
+    expect(readFileSync(envPath, 'utf8')).toBe('EMPTY=filled\nTAKEN=local-value\nSAME=v1\nUNKNOWN=x\n')
+  })
+
+  test('force overwrites values already set', async () => {
+    const { access, applyEnv } = makeTestbed()
+    const vault = await access.initVault('password-123')
+    setSecret(vault.data, DEFAULT_GROUP, 'TAKEN', 'vault-value')
+
+    const envPath = join(dir, '.env')
+    writeFileSync(envPath, 'TAKEN=local-value\n')
+
+    const result = applyEnv.applyAll(vault, DEFAULT_GROUP, envPath, true)
+    expect(result.applied).toEqual(['TAKEN'])
+    expect(result.skipped).toEqual([])
+    expect(readFileSync(envPath, 'utf8')).toBe('TAKEN=vault-value\n')
+  })
+})
+
+describe('applyOne use case', () => {
+  test('safe mode returns skipped for a set variable; force applies', async () => {
+    const { access, applyEnv } = makeTestbed()
+    const vault = await access.initVault('password-123')
+    setSecret(vault.data, DEFAULT_GROUP, 'TAKEN', 'vault-value')
+
+    const envPath = join(dir, '.env')
+    writeFileSync(envPath, 'TAKEN=local-value\n')
+
+    expect(applyEnv.applyOne(vault, DEFAULT_GROUP, 'TAKEN', envPath)).toBe('skipped')
+    expect(readFileSync(envPath, 'utf8')).toBe('TAKEN=local-value\n')
+
+    expect(applyEnv.applyOne(vault, DEFAULT_GROUP, 'TAKEN', envPath, true)).toBe('applied')
+    expect(readFileSync(envPath, 'utf8')).toBe('TAKEN=vault-value\n')
+  })
+
+  test('safe mode still fills an empty variable', async () => {
+    const { access, applyEnv } = makeTestbed()
+    const vault = await access.initVault('password-123')
+    setSecret(vault.data, DEFAULT_GROUP, 'EMPTY', 'filled')
+
+    const envPath = join(dir, '.env')
+    writeFileSync(envPath, 'EMPTY=\n')
+    expect(applyEnv.applyOne(vault, DEFAULT_GROUP, 'EMPTY', envPath)).toBe('applied')
+    expect(readFileSync(envPath, 'utf8')).toBe('EMPTY=filled\n')
+  })
+})
+
 describe('applyTemplate use case', () => {
   test('writes the target from the template, template untouched', async () => {
     const { access, applyEnv } = makeTestbed()
@@ -120,6 +181,39 @@ describe('applyTemplate use case', () => {
     expect(result.missing).toEqual(['UNKNOWN'])
     expect(readFileSync(target, 'utf8')).toBe('# header\nDB=real\nUNKNOWN=keep\n')
     expect(readFileSync(template, 'utf8')).toBe(templateContent)
+  })
+
+  test('safe mode keeps non-empty values already in the target', async () => {
+    const { access, applyEnv } = makeTestbed()
+    const vault = await access.initVault('password-123')
+    setSecret(vault.data, DEFAULT_GROUP, 'DB', 'vault-db')
+    setSecret(vault.data, DEFAULT_GROUP, 'FRESH', 'vault-fresh')
+
+    const template = join(dir, '.env.example')
+    const target = join(dir, '.env')
+    writeFileSync(template, 'DB=placeholder\nFRESH=\nMANUAL=\n')
+    writeFileSync(target, 'DB=local-db\nMANUAL=hand-set\n')
+
+    const result = applyEnv.applyTemplate(vault, DEFAULT_GROUP, template, target)
+    expect(result.applied).toEqual(['FRESH'])
+    expect(result.skipped).toEqual(['DB'])
+    expect(result.missing).toEqual(['MANUAL'])
+    expect(readFileSync(target, 'utf8')).toBe('DB=local-db\nFRESH=vault-fresh\nMANUAL=hand-set\n')
+  })
+
+  test('force regenerates the target from the vault', async () => {
+    const { access, applyEnv } = makeTestbed()
+    const vault = await access.initVault('password-123')
+    setSecret(vault.data, DEFAULT_GROUP, 'DB', 'vault-db')
+
+    const template = join(dir, '.env.example')
+    const target = join(dir, '.env')
+    writeFileSync(template, 'DB=placeholder\n')
+    writeFileSync(target, 'DB=local-db\n')
+
+    const result = applyEnv.applyTemplate(vault, DEFAULT_GROUP, template, target, true)
+    expect(result.applied).toEqual(['DB'])
+    expect(readFileSync(target, 'utf8')).toBe('DB=vault-db\n')
   })
 })
 

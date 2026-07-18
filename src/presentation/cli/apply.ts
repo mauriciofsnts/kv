@@ -1,3 +1,4 @@
+import type { ApplyAllResult } from '../../application/use-cases/apply-env.ts'
 import { applyEnv } from '../../composition.ts'
 import { listSecrets } from '../../domain/secret.ts'
 import { confirmPrompt } from './prompt.ts'
@@ -7,11 +8,23 @@ interface ApplyOptions {
   group?: string
   envFile?: string
   from?: string
+  force?: boolean
+}
+
+function summarize({ applied, skipped, missing }: ApplyAllResult): string {
+  const parts = [`✓ ${applied.length} applied`]
+  if (skipped.length > 0) {
+    parts.push(`↷ ${skipped.length} already set, use -f to overwrite (${skipped.join(', ')})`)
+  }
+  if (missing.length > 0) parts.push(`− ${missing.length} missing from vault (${missing.join(', ')})`)
+  return parts.join(' · ')
 }
 
 export async function cmdApply(target: string | undefined, options: ApplyOptions): Promise<void> {
   if (!target) {
-    console.error('Usage: key apply <VARIABLE|all> [--group group] [--env file] [--from template]')
+    console.error(
+      'Usage: key apply <VARIABLE|all> [--group group] [--env file] [--from template] [--force]',
+    )
     process.exit(1)
   }
   const envFile = options.envFile ?? '.env'
@@ -33,10 +46,8 @@ export async function cmdApply(target: string | undefined, options: ApplyOptions
       console.error(`Group "${group}" does not exist in the vault.`)
       process.exit(1)
     }
-    const { applied, missing } = applyEnv.applyTemplate(vault, group, options.from, envFile)
-    const parts = [`✓ ${applied.length} applied`]
-    if (missing.length > 0) parts.push(`− ${missing.length} missing from vault (${missing.join(', ')})`)
-    console.log(`${parts.join(' · ')} → wrote ${envFile} from ${options.from} [group: ${group}]`)
+    const result = applyEnv.applyTemplate(vault, group, options.from, envFile, options.force)
+    console.log(`${summarize(result)} → wrote ${envFile} from ${options.from} [group: ${group}]`)
     return
   }
 
@@ -53,19 +64,21 @@ export async function cmdApply(target: string | undefined, options: ApplyOptions
   }
 
   if (target === 'all') {
-    const { applied, missing } = applyEnv.applyAll(vault, group, envFile)
-    const parts = [`✓ ${applied.length} applied`]
-    if (missing.length > 0) parts.push(`− ${missing.length} missing from vault (${missing.join(', ')})`)
-    console.log(`${parts.join(' · ')} [group: ${group}]`)
+    const result = applyEnv.applyAll(vault, group, envFile, options.force)
+    console.log(`${summarize(result)} [group: ${group}]`)
     if (listSecrets(vault.data, group).length === 0) {
       console.log(`Tip: group "${group}" is empty. Use \`key set NAME --group ${group}\`.`)
     }
     return
   }
 
-  const result = applyEnv.applyOne(vault, group, target, envFile)
+  const result = applyEnv.applyOne(vault, group, target, envFile, options.force)
   if (result === 'applied') {
     console.log(`✓ ${target} applied to ${envFile} [group: ${group}]`)
+    return
+  }
+  if (result === 'skipped') {
+    console.log(`↷ ${target} already has a value in ${envFile} — use -f to overwrite.`)
     return
   }
 

@@ -113,10 +113,11 @@ echo "my-project" > .key   # every `key apply` in this directory uses the my-pro
 ### apply
 
 - Edits the `.env` **in-place**, preserving comments, line order, `export` prefix and CRLF.
+- **Safe by default**: a variable that already holds a (different, non-empty) value is left alone and reported as skipped; pass `--force`/`-f` to overwrite it.
 - Values with spaces/`#`/quotes get double quotes automatically.
 - `key apply VAR` with a variable missing from the `.env` asks before appending it at the end.
-- `key apply all` prints a summary: `✓ 4 applied · − 2 missing from vault (...)`.
-- `key apply all --from .env.example` generates the target from a template instead of patching in place (the template is never modified; variables the vault doesn't know keep their template value).
+- `key apply all` prints a summary: `✓ 4 applied · ↷ 1 already set, use -f to overwrite (...) · − 2 missing from vault (...)`.
+- `key apply all --from .env.example` generates the target from a template instead of patching in place (the template is never modified; variables the vault doesn't know keep their template value). Without `--force`, non-empty values already in the target survive the regeneration.
 - `--env file` targets another file (default `./.env`).
 
 ### TUI
