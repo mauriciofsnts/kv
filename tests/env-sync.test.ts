@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { ConfigStore, SessionCache } from '../src/application/ports.ts'
@@ -183,6 +183,20 @@ describe('applyTemplate use case', () => {
     expect(readFileSync(template, 'utf8')).toBe(templateContent)
     // A freshly created target holds plaintext secrets — owner-only access.
     expect(statSync(target).mode & 0o777).toBe(0o600)
+    expect(existsSync(target + '.tmp')).toBe(false)
+  })
+
+  test('writing keeps the mode the user gave an existing file', async () => {
+    const { access, applyEnv } = makeTestbed()
+    const vault = await access.initVault('password-123')
+    setSecret(vault.data, DEFAULT_GROUP, 'DB', 'real')
+
+    const envPath = join(dir, '.env')
+    writeFileSync(envPath, 'DB=old\n', { mode: 0o644 })
+
+    applyEnv.applyAll(vault, DEFAULT_GROUP, envPath, true)
+    expect(readFileSync(envPath, 'utf8')).toBe('DB=real\n')
+    expect(statSync(envPath).mode & 0o777).toBe(0o644)
   })
 
   test('safe mode keeps non-empty values already in the target', async () => {

@@ -7,7 +7,25 @@ const KEY_LENGTH = 32
 const IV_LENGTH = 12
 const SALT_LENGTH = 16
 
-export const SCRYPT_PARAMS: { N: number; r: number; p: number } = { N: 32768, r: 8, p: 1 }
+// N=2^17, r=8 (~128 MiB): OWASP's recommendation for interactive scrypt.
+// Old vaults keep their stored params until the next `key passwd` rekeys.
+export const SCRYPT_PARAMS: { N: number; r: number; p: number } = { N: 131072, r: 8, p: 1 }
+
+// The envelope's KDF params are attacker-controlled for vaults stored in a
+// shared database: bound the scrypt memory (128*N*r bytes) so a tampered
+// envelope can't demand gigabytes before decryption even starts.
+const MAX_KDF_MEMORY = 1024 ** 3
+
+function assertSaneKdf({ N, r, p }: KdfParams): void {
+  const valid =
+    Number.isInteger(N) && N >= 2 && (N & (N - 1)) === 0 &&
+    Number.isInteger(r) && r >= 1 &&
+    Number.isInteger(p) && p >= 1 && p <= 16 &&
+    128 * N * r <= MAX_KDF_MEMORY
+  if (!valid) {
+    throw new Error('Refusing KDF parameters outside sane bounds (tampered vault?).')
+  }
+}
 
 export const nodeCrypto: CryptoProvider = {
   newKdfParams(): KdfParams {
@@ -19,6 +37,7 @@ export const nodeCrypto: CryptoProvider = {
   },
 
   deriveKey(password: string, kdf: KdfParams): Buffer {
+    assertSaneKdf(kdf)
     return scryptSync(password, Buffer.from(kdf.salt, 'base64'), KEY_LENGTH, {
       N: kdf.N,
       r: kdf.r,

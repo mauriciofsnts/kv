@@ -150,10 +150,16 @@ export function makeShareGroup(
 }
 
 function generateCode(crypto: CryptoProvider): string {
-  const bytes = crypto.randomBytes(CODE_LENGTH)
+  // Rejection sampling: 256 % 30 ≠ 0, so a plain modulo would slightly
+  // favor the first alphabet characters.
+  const limit = 256 - (256 % CODE_ALPHABET.length)
   let code = ''
-  for (let i = 0; i < CODE_LENGTH; i++) {
-    code += CODE_ALPHABET[bytes[i]! % CODE_ALPHABET.length]
+  while (code.length < CODE_LENGTH) {
+    for (const byte of crypto.randomBytes(CODE_LENGTH)) {
+      if (byte >= limit) continue
+      code += CODE_ALPHABET[byte % CODE_ALPHABET.length]
+      if (code.length === CODE_LENGTH) break
+    }
   }
   return code
 }

@@ -46,6 +46,23 @@ describe('crypto', () => {
     expect(k1.equals(k3)).toBe(false)
   })
 
+  test('deriveKey refuses tampered KDF params', () => {
+    const base = nodeCrypto.newKdfParams()
+    const insane = [
+      { ...base, N: 2 ** 24 },   // 128*N*r would demand 16 GiB
+      { ...base, N: 100000 },    // not a power of two
+      { ...base, N: 0 },
+      { ...base, r: 0 },
+      { ...base, r: 4096 },      // memory bound via r instead of N
+      { ...base, p: 0 },
+      { ...base, p: 1000 },
+      { ...base, N: 2.5, r: 8, p: 1 },
+    ]
+    for (const kdf of insane) {
+      expect(() => nodeCrypto.deriveKey('password', kdf)).toThrow('outside sane bounds')
+    }
+  })
+
   test('unicode content survives the roundtrip', () => {
     const kdf = nodeCrypto.newKdfParams()
     const key = nodeCrypto.deriveKey('password', kdf)
