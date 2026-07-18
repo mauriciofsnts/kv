@@ -31,12 +31,12 @@ bun link   # puts the `key` command on your PATH
 
 ### Shell completions
 
-`key completions <shell>` prints the completion script — subcommands, flags, and (when the vault session is unlocked) group and secret *names* are completed dynamically; values are never involved:
+Completion scripts live in [`docs/completions/`](docs/completions/) — subcommands, flags, and (when the vault session is unlocked) group and secret *names* are completed dynamically; values are never involved:
 
 ```bash
-key completions zsh  > "${fpath[1]}/_key"                                 # zsh
-key completions bash > ~/.local/share/bash-completion/completions/key    # bash
-key completions fish > ~/.config/fish/completions/key.fish               # fish
+cp docs/completions/_key "${fpath[1]}/_key"                                       # zsh
+cp docs/completions/key.bash ~/.local/share/bash-completion/completions/key      # bash
+cp docs/completions/key.fish ~/.config/fish/completions/key.fish                 # fish
 ```
 
 ## Usage
@@ -65,7 +65,6 @@ key vault sqlite://~/.local/share/key/vault.db      # move the vault to SQLite
 key vault postgres://user:pass@host:5432/db         # ...or to Postgres
 key share backend               # share a group: encrypted QR + one-time code
 key import                      # paste a shared payload and type the code
-key completions zsh             # print shell completions (zsh, bash or fish)
 ```
 
 ### Aliases

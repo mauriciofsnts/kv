@@ -75,14 +75,3 @@ describe('key __complete', () => {
     expect(lines(names.stdout)).toEqual(['API_KEY'])
   })
 })
-
-describe('key completions', () => {
-  test('prints a script per shell and rejects unknown shells', async () => {
-    expect((await runKey(['completions', 'zsh'])).stdout).toStartWith('#compdef key')
-    expect((await runKey(['completions', 'bash'])).stdout).toContain(
-      'complete -F _key_completions key',
-    )
-    expect((await runKey(['completions', 'fish'])).stdout).toContain('complete -c key')
-    expect((await runKey(['completions', 'powershell'])).exitCode).toBe(1)
-  })
-})
