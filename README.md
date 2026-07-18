@@ -8,11 +8,35 @@ POSTGRES_DB=placeholder      →  key apply POSTGRES_DB  →  POSTGRES_DB=real_v
 
 ## Install
 
+### Single binary (no Bun required)
+
+`bun run build` compiles everything (runtime included) into one executable:
+
+```bash
+bun install
+bun run build          # → dist/key (this platform)
+bun run build:release  # → dist/release/*.tar.gz (linux/darwin × x64/arm64, for GitHub Releases)
+```
+
+Copy `dist/key` anywhere on your `PATH` — the machine running it doesn't need Bun.
+
+### From source
+
 Requires [Bun](https://bun.sh) ≥ 1.3.
 
 ```bash
 bun install
 bun link   # puts the `key` command on your PATH
+```
+
+### Shell completions
+
+`key completions <shell>` prints the completion script — subcommands, flags, and (when the vault session is unlocked) group and secret *names* are completed dynamically; values are never involved:
+
+```bash
+key completions zsh  > "${fpath[1]}/_key"                                 # zsh
+key completions bash > ~/.local/share/bash-completion/completions/key    # bash
+key completions fish > ~/.config/fish/completions/key.fish               # fish
 ```
 
 ## Usage
@@ -41,6 +65,7 @@ key vault sqlite://~/.local/share/key/vault.db      # move the vault to SQLite
 key vault postgres://user:pass@host:5432/db         # ...or to Postgres
 key share backend               # share a group: encrypted QR + one-time code
 key import                      # paste a shared payload and type the code
+key completions zsh             # print shell completions (zsh, bash or fish)
 ```
 
 ### Aliases
