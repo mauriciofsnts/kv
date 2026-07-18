@@ -3,8 +3,10 @@
 // Whoever gets the payload learns nothing without the code, so the QR/text
 // and the code should travel through different channels.
 //
-// Payload format v1 (also the wire contract for `key import`):
-//   "keyshare1:" + base64url( salt(16) | iv(12) | tag(16) | ciphertext )
+// Payload format v1 (also the wire contract for `kv import`):
+//   "kvshare1:" + base64url( salt(16) | iv(12) | tag(16) | ciphertext )
+// ("keyshare1:" — the prefix from when the tool was named `key` — is still
+// accepted on import; the bytes after the prefix are identical.)
 // KDF is fixed to scrypt N=32768 r=8 p=1 — part of the format, independent
 // of whatever the vault itself uses.
 import { gunzipSync, gzipSync } from 'node:zlib'
@@ -14,7 +16,8 @@ import type { CryptoProvider, KdfParams } from '../ports.ts'
 import type { Vault } from '../vault.ts'
 import type { VaultAccess } from './vault-access.ts'
 
-const PREFIX = 'keyshare1:'
+const PREFIX = 'kvshare1:'
+const LEGACY_PREFIX = 'keyshare1:'
 const SHARE_KDF: Omit<KdfParams, 'salt'> = { algo: 'scrypt', N: 32768, r: 8, p: 1 }
 const SALT_LENGTH = 16
 // Crockford-style base32: no I/L/O/U/0/1 lookalikes. 16 chars ≈ 80 bits.
@@ -87,10 +90,11 @@ export function makeShareGroup(
 
     decodeShare(payload: string, code: string): SharePayload {
       const trimmed = payload.trim()
-      if (!trimmed.startsWith(PREFIX)) {
-        throw new Error('Not a key share payload (expected it to start with "keyshare1:").')
+      const prefix = [PREFIX, LEGACY_PREFIX].find((p) => trimmed.startsWith(p))
+      if (!prefix) {
+        throw new Error('Not a kv share payload (expected it to start with "kvshare1:").')
       }
-      const bytes = Buffer.from(trimmed.slice(PREFIX.length), 'base64url')
+      const bytes = Buffer.from(trimmed.slice(prefix.length), 'base64url')
       if (bytes.length <= SALT_LENGTH + 12 + 16) {
         throw new Error('Share payload is truncated.')
       }

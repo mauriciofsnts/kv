@@ -7,7 +7,7 @@ export class WrongPasswordError extends Error {
 
 export class VaultNotFoundError extends Error {
   constructor(location: string) {
-    super(`Vault not found at ${location}. Run \`key init\` to create one.`)
+    super(`Vault not found at ${location}. Run \`kv init\` to create one.`)
     this.name = 'VaultNotFoundError'
   }
 }

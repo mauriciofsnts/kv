@@ -8,7 +8,7 @@ const IV_LENGTH = 12
 const SALT_LENGTH = 16
 
 // N=2^17, r=8 (~128 MiB): OWASP's recommendation for interactive scrypt.
-// Old vaults keep their stored params until the next `key passwd` rekeys.
+// Old vaults keep their stored params until the next `kv passwd` rekeys.
 export const SCRYPT_PARAMS: { N: number; r: number; p: number } = { N: 131072, r: 8, p: 1 }
 
 // The envelope's KDF params are attacker-controlled for vaults stored in a

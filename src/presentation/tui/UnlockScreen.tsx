@@ -59,7 +59,7 @@ export function UnlockScreen() {
   return (
     <box flexDirection="row" height={9}>
       <box flexDirection="column" padding={1} border="round" borderColor="cyan" gap={1} width={BOX_WIDTH} height={9}>
-        <text height={1} width={innerWidth} bold color="cyan">🔐 key — vault locked</text>
+        <text height={1} width={innerWidth} bold color="cyan">🔐 kv — vault locked</text>
         <Field label="Passwd:" labelWidth={8} value={password} width={innerWidth} isFocused={true} mask />
         <text height={1} width={innerWidth} color="red">{error || ' '}</text>
         <text height={1} width={innerWidth} dim>Enter unlocks · Ctrl+C quits</text>

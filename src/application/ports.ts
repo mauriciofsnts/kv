@@ -51,7 +51,7 @@ export interface ConfigStore {
   // True when an env var overrides the persisted location.
   locationOverridden(): boolean
   minPasswordLength(): number
-  // Default for `key apply`'s --force when the flag is not given.
+  // Default for `kv apply`'s --force when the flag is not given.
   forceApply(): boolean
   setForceApply(value: boolean): void
 }

@@ -9,19 +9,19 @@ import type { SessionCache } from '../../application/ports.ts'
 const DEFAULT_TTL_SECONDS = 15 * 60
 
 export function sessionTtlMs(): number {
-  const raw = process.env.KEY_SESSION_TTL
+  const raw = process.env.KV_SESSION_TTL
   const seconds = raw ? Number.parseInt(raw, 10) : DEFAULT_TTL_SECONDS
   return (Number.isFinite(seconds) && seconds > 0 ? seconds : DEFAULT_TTL_SECONDS) * 1000
 }
 
 // Returns the session cache path and whether it lives in tmpfs.
 export function sessionPath(): { path: string; volatile: boolean } {
-  if (process.env.KEY_SESSION_PATH) {
-    return { path: process.env.KEY_SESSION_PATH, volatile: true }
+  if (process.env.KV_SESSION_PATH) {
+    return { path: process.env.KV_SESSION_PATH, volatile: true }
   }
   const runtimeDir = process.env.XDG_RUNTIME_DIR
-  if (runtimeDir) return { path: join(runtimeDir, 'key', 'session'), volatile: true }
-  return { path: join(homedir(), '.cache', 'key', 'session'), volatile: false }
+  if (runtimeDir) return { path: join(runtimeDir, 'kv', 'session'), volatile: true }
+  return { path: join(homedir(), '.cache', 'kv', 'session'), volatile: false }
 }
 
 interface SessionFile {

@@ -26,7 +26,7 @@ export interface EnvEntry {
   value: string
 }
 
-// Parses names AND values (what `key scan`/`key diff` consume). Follows
+// Parses names AND values (what `kv scan`/`kv diff` consume). Follows
 // consumer semantics: when a variable repeats, the last occurrence wins.
 // Quoting: "..." unescapes \" \\ \n; '...' is literal; unquoted values are
 // trimmed and lose trailing ` # comments`.

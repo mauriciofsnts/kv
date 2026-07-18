@@ -151,7 +151,7 @@ export function makeManageSecrets(access: Pick<VaultAccess, 'saveVault'>) {
       await access.saveVault(vault)
     },
 
-    // Bulk import of name/value pairs (the `key scan` flow). planImport
+    // Bulk import of name/value pairs (the `kv scan` flow). planImport
     // classifies without touching anything; importEntries applies the
     // non-conflicting part of the plan with a single save.
     planImport(vault: Vault, group: string, entries: { name: string; value: string }[]): ImportPlan {

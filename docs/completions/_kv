@@ -1,12 +1,12 @@
-#compdef key
+#compdef kv
 
-_key_groups() {
+_kv_groups() {
   local -a groups
-  groups=(${(f)"$(command key __complete groups 2>/dev/null)"})
+  groups=(${(f)"$(command kv __complete groups 2>/dev/null)"})
   (( $#groups )) && _describe -t groups 'group' groups
 }
 
-_key_names() {
+_kv_names() {
   local -a names fwd
   local i
   for ((i = 1; i <= $#words; i++)); do
@@ -14,23 +14,23 @@ _key_names() {
       fwd=(--group "$words[i+1]")
     fi
   done
-  names=(${(f)"$(command key __complete names $fwd 2>/dev/null)"})
+  names=(${(f)"$(command kv __complete names $fwd 2>/dev/null)"})
   (( $#names )) && _describe -t secrets 'secret' names
 }
 
-_key_apply_targets() {
+_kv_apply_targets() {
   local -a names
-  _key_names
+  _kv_names
   names=(all)
   _describe -t targets 'target' names
 }
 
-_key() {
+_kv() {
   local curcontext="$curcontext" state line
   typeset -A opt_args
 
   local -a group_opt env_opt
-  group_opt=('(-g --group)'{-g,--group}'[vault group]:group:_key_groups')
+  group_opt=('(-g --group)'{-g,--group}'[vault group]:group:_kv_groups')
   env_opt=('(-e --env)'{-e,--env}'[target .env file]:file:_files')
 
   _arguments -C \
@@ -69,20 +69,20 @@ _key() {
             '--from[template file]:file:_files' \
             '(-f --force)'{-f,--force}'[overwrite variables that already have a value]' \
             '(-s --safe)'{-s,--safe}'[skip variables that already have a value]' \
-            '1:variable:_key_apply_targets'
+            '1:variable:_kv_apply_targets'
           ;;
         get)
           _arguments $group_opt \
             '(-c --copy)'{-c,--copy}'[copy to clipboard]' \
-            '1:secret:_key_names'
+            '1:secret:_kv_names'
           ;;
         set|rm)
-          _arguments $group_opt '1:secret:_key_names'
+          _arguments $group_opt '1:secret:_kv_names'
           ;;
         alias)
           _arguments $group_opt \
             '1:action:(add rm move)' \
-            '*:secret:_key_names'
+            '*:secret:_kv_names'
           ;;
         scan|diff)
           _arguments $group_opt $env_opt
@@ -91,7 +91,7 @@ _key() {
           _arguments $group_opt
           ;;
         share|import)
-          _arguments $group_opt '1:group:_key_groups'
+          _arguments $group_opt '1:group:_kv_groups'
           ;;
         config)
           _arguments '1:setting:(force)' '2:value:(on off)'
@@ -101,4 +101,4 @@ _key() {
   esac
 }
 
-_key "$@"
+_kv "$@"
