@@ -86,6 +86,11 @@ export function makeVaultAccess({ crypto, sessions, config, repositoryFor }: Vau
       }
       const kdf = crypto.newKdfParams()
       const rekeyed: Vault = { ...vault, key: crypto.deriveKey(newPassword, kdf), kdf }
+      // Save twice: repositories keep the previous version as a backup
+      // (.bak file / `previous` column), and a single save would leave that
+      // backup encrypted under the old password — defeating the point of
+      // changing it. The second save makes the backup a new-key envelope.
+      await saveVault(rekeyed)
       await saveVault(rekeyed)
       sessions.clear()
       return rekeyed
