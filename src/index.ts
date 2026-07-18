@@ -9,6 +9,7 @@ import { cmdRun } from './presentation/cli/run.ts'
 import { cmdScan } from './presentation/cli/scan.ts'
 import { cmdAlias, cmdGet, cmdList, cmdPasswd, cmdRm, cmdSet } from './presentation/cli/secrets.ts'
 import { cmdComplete } from './presentation/cli/completions.ts'
+import { cmdConfig } from './presentation/cli/configcmd.ts'
 import { cmdImport, cmdShare } from './presentation/cli/share.ts'
 import { cmdVault } from './presentation/cli/vaultcmd.ts'
 import { ui, uiErr, type Ui } from './presentation/cli/ui.ts'
@@ -40,6 +41,9 @@ function help(u: Ui): string {
     row('key import [PAYLOAD]', 'Import a shared group (asks for the one-time code)'),
     row('key lock', 'End the session (ask for the password again)'),
     row('key passwd', 'Change the vault password'),
+    row('key config', 'Show persisted settings'),
+    row('key config force on|off', 'Make `key apply` overwrite existing values by'),
+    cont('default (no need for -f every time)'),
     row('key vault [location]', 'Show or change where the vault is stored:'),
     cont('a file path or a database URL'),
     cont('(sqlite://, postgres://, mysql://, mariadb://)'),
@@ -49,7 +53,10 @@ function help(u: Ui): string {
     row('--env, -e <file>', 'Target file for apply/scan/diff (default: ./.env)'),
     row('--from <file>', 'Template file for `key apply all --from`'),
     row('--force, -f', 'key apply: overwrite variables that already have a'),
-    cont('value (by default they are skipped)'),
+    cont('value (by default they are skipped; make this the'),
+    cont('default with `key config force on`)'),
+    row('--safe, -s', 'key apply: skip variables that already have a value'),
+    cont('even when force apply is enabled'),
     row('--copy, -c', 'key get: copy to clipboard instead of printing'),
     row('--help, -h', 'Show this help'),
     '',
@@ -57,6 +64,8 @@ function help(u: Ui): string {
     row('KEY_VAULT_PATH', 'Vault location: file path or database URL'),
     cont('(default: ~/.config/key/vault.enc; also settable'),
     cont('via `key vault`)'),
+    row('KEY_FORCE_APPLY', '1/true or 0/false: overwrite existing values on'),
+    cont('`key apply` (overrides `key config force`)'),
     row('KEY_SESSION_TTL', 'Session TTL in seconds (default: 900)'),
     row('KEY_MIN_PASSWORD_LENGTH', 'Minimum vault password length (default: 8)'),
     '',
@@ -78,6 +87,7 @@ async function main(): Promise<void> {
       env: { type: 'string', short: 'e' },
       from: { type: 'string' },
       force: { type: 'boolean', short: 'f' },
+      safe: { type: 'boolean', short: 's' },
       copy: { type: 'boolean', short: 'c' },
       help: { type: 'boolean', short: 'h' },
     },
@@ -106,6 +116,7 @@ async function main(): Promise<void> {
         envFile: values.env,
         from: values.from,
         force: values.force,
+        safe: values.safe,
       })
       break
     case 'run':
@@ -131,6 +142,9 @@ async function main(): Promise<void> {
       break
     case 'alias':
       await cmdAlias(positionals.slice(1), values.group)
+      break
+    case 'config':
+      await cmdConfig(positionals.slice(1))
       break
     case 'vault':
       await cmdVault(arg)

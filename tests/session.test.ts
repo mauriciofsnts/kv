@@ -10,6 +10,7 @@ let dir: string
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'key-session-'))
   process.env.KEY_SESSION_PATH = join(dir, 'session')
+  process.env.XDG_CONFIG_HOME = join(dir, 'config')
   delete process.env.KEY_SESSION_TTL
 })
 
@@ -18,6 +19,8 @@ afterEach(() => {
   delete process.env.KEY_SESSION_PATH
   delete process.env.KEY_SESSION_TTL
   delete process.env.KEY_MIN_PASSWORD_LENGTH
+  delete process.env.KEY_FORCE_APPLY
+  delete process.env.XDG_CONFIG_HOME
 })
 
 describe('session', () => {
@@ -83,5 +86,46 @@ describe('minPasswordLength', () => {
     expect(jsonConfigStore.minPasswordLength()).toBe(8)
     process.env.KEY_MIN_PASSWORD_LENGTH = '-5'
     expect(jsonConfigStore.minPasswordLength()).toBe(8)
+  })
+})
+
+describe('forceApply', () => {
+  test('defaults to off', () => {
+    expect(jsonConfigStore.forceApply()).toBe(false)
+  })
+
+  test('setForceApply persists across reads', () => {
+    jsonConfigStore.setForceApply(true)
+    expect(jsonConfigStore.forceApply()).toBe(true)
+    jsonConfigStore.setForceApply(false)
+    expect(jsonConfigStore.forceApply()).toBe(false)
+  })
+
+  test('setForceApply keeps the vault location intact', () => {
+    jsonConfigStore.setVaultLocation('/tmp/some-vault.enc')
+    jsonConfigStore.setForceApply(true)
+    delete process.env.KEY_VAULT_PATH
+    expect(jsonConfigStore.vaultLocation()).toBe('/tmp/some-vault.enc')
+    expect(jsonConfigStore.forceApply()).toBe(true)
+  })
+
+  test('KEY_FORCE_APPLY overrides the persisted value', () => {
+    jsonConfigStore.setForceApply(true)
+    process.env.KEY_FORCE_APPLY = '0'
+    expect(jsonConfigStore.forceApply()).toBe(false)
+    process.env.KEY_FORCE_APPLY = 'false'
+    expect(jsonConfigStore.forceApply()).toBe(false)
+    jsonConfigStore.setForceApply(false)
+    process.env.KEY_FORCE_APPLY = '1'
+    expect(jsonConfigStore.forceApply()).toBe(true)
+    process.env.KEY_FORCE_APPLY = 'true'
+    expect(jsonConfigStore.forceApply()).toBe(true)
+  })
+
+  test('unrecognized KEY_FORCE_APPLY falls back to config', () => {
+    process.env.KEY_FORCE_APPLY = 'maybe'
+    expect(jsonConfigStore.forceApply()).toBe(false)
+    jsonConfigStore.setForceApply(true)
+    expect(jsonConfigStore.forceApply()).toBe(true)
   })
 })
