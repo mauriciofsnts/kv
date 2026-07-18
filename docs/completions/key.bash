@@ -5,7 +5,7 @@ _key_completions() {
   words=("${COMP_WORDS[@]}")
   cword=$COMP_CWORD
 
-  local commands="init apply run scan diff set get list rm alias vault share import lock passwd help"
+  local commands="init apply run scan diff set get list rm alias config vault share import lock passwd help"
 
   case $prev in
     -g | --group)

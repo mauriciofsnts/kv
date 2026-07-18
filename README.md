@@ -141,6 +141,7 @@ echo "my-project" > .key   # every `key apply` in this directory uses the my-pro
 
 - Edits the `.env` **in-place**, preserving comments, line order, `export` prefix and CRLF.
 - **Safe by default**: a variable that already holds a (different, non-empty) value is left alone and reported as skipped; pass `--force`/`-f` to overwrite it.
+- `key config force on` makes overwriting the default so you never have to type `-f`; `--safe`/`-s` restores the skip behavior for a single run, and `key config force off` restores it permanently. `KEY_FORCE_APPLY=1|0` overrides the persisted setting.
 - Values with spaces/`#`/quotes get double quotes automatically.
 - `key apply VAR` with a variable missing from the `.env` asks before appending it at the end.
 - `key apply all` prints a summary: `✓ 4 applied · ↷ 1 already set, use -f to overwrite (...) · − 2 missing from vault (...)`.
@@ -174,6 +175,7 @@ Environment variables:
 | Variable | Meaning | Default |
 |---|---|---|
 | `KEY_VAULT_PATH` | Vault location: file path or database URL (overrides `key vault` config) | `~/.config/key/vault.enc` |
+| `KEY_FORCE_APPLY` | `1`/`true` or `0`/`false`: overwrite existing values on `key apply` (overrides `key config force`) | unset |
 | `KEY_SESSION_TTL` | Session TTL in seconds | `900` |
 | `KEY_MIN_PASSWORD_LENGTH` | Minimum vault password length (enforced by `init` and `passwd`) | `8` |
 | `KEY_SESSION_PATH` | Session cache path (useful in tests) | `$XDG_RUNTIME_DIR/key/session` |
