@@ -12,7 +12,7 @@ import { resolveGroup, unlockVault } from './unlock.ts'
 
 export async function cmdSet(name: string | undefined, groupFlag?: string): Promise<void> {
   if (!name) {
-    console.error('Usage: key set NAME [--group group]')
+    console.error('Usage: kv set NAME [--group group]')
     process.exit(1)
   }
   const vault = await unlockVault()
@@ -35,7 +35,7 @@ export async function cmdGet(
   copy = false,
 ): Promise<void> {
   if (!name) {
-    console.error('Usage: key get NAME [--group group] [--copy]')
+    console.error('Usage: kv get NAME [--group group] [--copy]')
     process.exit(1)
   }
   const vault = await unlockVault()
@@ -81,7 +81,7 @@ export async function cmdList(groupFlag?: string): Promise<void> {
 
 export async function cmdRm(name: string | undefined, groupFlag?: string): Promise<void> {
   if (!name) {
-    console.error('Usage: key rm NAME [--group group]')
+    console.error('Usage: kv rm NAME [--group group]')
     process.exit(1)
   }
   const vault = await unlockVault()
@@ -98,13 +98,13 @@ export async function cmdRm(name: string | undefined, groupFlag?: string): Promi
   console.log(ui.ok(`${ui.bold(name)} removed.`))
 }
 
-// key alias NAME            → list aliases
-// key alias add NAME A B    → add aliases
-// key alias rm NAME A B     → remove aliases
-// key alias move NAME DEST  → NAME (and its aliases) become aliases of DEST
+// kv alias NAME            → list aliases
+// kv alias add NAME A B    → add aliases
+// kv alias rm NAME A B     → remove aliases
+// kv alias move NAME DEST  → NAME (and its aliases) become aliases of DEST
 export async function cmdAlias(args: string[], groupFlag?: string): Promise<void> {
   const usage =
-    'Usage: key alias NAME | key alias add NAME ALIAS... | key alias rm NAME ALIAS... | key alias move NAME DEST'
+    'Usage: kv alias NAME | key alias add NAME ALIAS... | key alias rm NAME ALIAS... | key alias move NAME DEST'
   const [first, ...rest] = args
   if (!first) {
     console.error(usage)
@@ -186,7 +186,7 @@ export async function cmdPasswd(): Promise<void> {
   if (password.length < config.minPasswordLength()) {
     console.error(
       uiErr.bad(
-        `Password must be at least ${config.minPasswordLength()} characters (KEY_MIN_PASSWORD_LENGTH).`,
+        `Password must be at least ${config.minPasswordLength()} characters (KV_MIN_PASSWORD_LENGTH).`,
       ),
     )
     process.exit(1)

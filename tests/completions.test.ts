@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 // Completion is exercised through the real CLI entrypoint: the shell scripts
-// call `key __complete …` as a subprocess, so that is the contract to test.
+// call `kv __complete …` as a subprocess, so that is the contract to test.
 let dir: string
 
 beforeEach(() => {
@@ -23,8 +23,8 @@ async function runKey(
     cwd: opts.cwd ?? dir,
     env: {
       ...process.env,
-      KEY_VAULT_PATH: join(dir, 'vault.enc'),
-      KEY_SESSION_PATH: join(dir, 'session'),
+      KV_VAULT_PATH: join(dir, 'vault.enc'),
+      KV_SESSION_PATH: join(dir, 'session'),
       XDG_CONFIG_HOME: join(dir, 'config'),
     },
     stdin: opts.stdin ? new TextEncoder().encode(opts.stdin) : undefined,
@@ -37,7 +37,7 @@ async function runKey(
 
 const lines = (out: string) => out.split('\n').filter(Boolean)
 
-describe('key __complete', () => {
+describe('kv __complete', () => {
   test('lists groups and names (with aliases) from the session', async () => {
     await runKey(['init'], { stdin: 'testpass123\ntestpass123\n' })
     await runKey(['set', 'DATABASE_URL'], { stdin: 'value\n' })
@@ -67,7 +67,15 @@ describe('key __complete', () => {
     expect(missing.exitCode).toBe(0)
   })
 
-  test('respects the .key group marker for names', async () => {
+  test('respects the .kv group marker for names', async () => {
+    await runKey(['init'], { stdin: 'testpass123\ntestpass123\n' })
+    await runKey(['set', 'API_KEY', '-g', 'backend'], { stdin: 'value\n' })
+    writeFileSync(join(dir, '.kv'), 'backend\n')
+    const names = await runKey(['__complete', 'names'])
+    expect(lines(names.stdout)).toEqual(['API_KEY'])
+  })
+
+  test('honors a legacy .key group marker', async () => {
     await runKey(['init'], { stdin: 'testpass123\ntestpass123\n' })
     await runKey(['set', 'API_KEY', '-g', 'backend'], { stdin: 'value\n' })
     writeFileSync(join(dir, '.key'), 'backend\n')

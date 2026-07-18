@@ -12,7 +12,7 @@ export async function cmdInit(): Promise<void> {
   if (password.length < config.minPasswordLength()) {
     console.error(
       uiErr.bad(
-        `Password must be at least ${config.minPasswordLength()} characters (KEY_MIN_PASSWORD_LENGTH).`,
+        `Password must be at least ${config.minPasswordLength()} characters (KV_MIN_PASSWORD_LENGTH).`,
       ),
     )
     process.exit(1)
@@ -24,5 +24,5 @@ export async function cmdInit(): Promise<void> {
   }
   await vaultAccess.initVault(password, location)
   console.log(ui.ok(`Vault created at ${ui.bold(location)}.`))
-  console.log(ui.dim('Use `key set NAME` to store secrets or `key` to open the TUI.'))
+  console.log(ui.dim('Use `kv set NAME` to store secrets or `kv` to open the TUI.'))
 }

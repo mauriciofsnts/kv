@@ -4,11 +4,11 @@ import { useTuiStore } from './store.ts'
 
 export async function runTui(): Promise<void> {
   if (!(await vaultAccess.exists())) {
-    console.error('No vault found. Run `key init` first.')
+    console.error('No vault found. Run `kv init` first.')
     process.exit(1)
   }
   if (!process.stdout.isTTY) {
-    console.error('The TUI needs an interactive terminal. Use the subcommands (key --help).')
+    console.error('The TUI needs an interactive terminal. Use the subcommands (kv --help).')
     process.exit(1)
   }
 
