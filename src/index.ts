@@ -40,6 +40,8 @@ Options:
   --group, -g <group>       Vault group (default: .key file in the directory, else "default")
   --env, -e <file>          Target file for apply/scan/diff (default: ./.env)
   --from <file>             Template file for \`key apply all --from\`
+  --force, -f               key apply: overwrite variables that already have a
+                            value (by default they are skipped)
   --copy, -c                key get: copy to clipboard instead of printing
   --help, -h                Show this help
 
@@ -65,6 +67,7 @@ async function main(): Promise<void> {
       group: { type: 'string', short: 'g' },
       env: { type: 'string', short: 'e' },
       from: { type: 'string' },
+      force: { type: 'boolean', short: 'f' },
       copy: { type: 'boolean', short: 'c' },
       help: { type: 'boolean', short: 'h' },
     },
@@ -88,7 +91,12 @@ async function main(): Promise<void> {
       await cmdInit()
       break
     case 'apply':
-      await cmdApply(arg, { group: values.group, envFile: values.env, from: values.from })
+      await cmdApply(arg, {
+        group: values.group,
+        envFile: values.env,
+        from: values.from,
+        force: values.force,
+      })
       break
     case 'run':
       await cmdRun(passthrough.length > 0 ? passthrough : positionals.slice(1), values.group)
