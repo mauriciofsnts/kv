@@ -58,6 +58,7 @@ key rm POSTGRES_DB              # remove with confirmation
 key alias add DATABASE_URL DB_URL POSTGRES_URL   # alternative names, same value
 key alias rm DATABASE_URL POSTGRES_URL           # remove aliases
 key alias DATABASE_URL          # list a secret's aliases
+key alias move DB_URL DATABASE_URL               # DB_URL becomes an alias of DATABASE_URL
 key lock                        # end the session (ask for the password again)
 key passwd                      # change the password (re-encrypts the vault)
 key vault                       # show where the vault is stored
@@ -79,6 +80,8 @@ key get DB_URL   # also resolves through the alias
 ```
 
 Aliases are unique within a group: an alias can't collide with another secret's name or aliases. In the TUI, the add/edit form has an **Aliases** field (comma-separated) and the list shows a `+N` badge next to names that have aliases.
+
+Ended up with two secrets that should be one? `key alias move SOURCE TARGET` folds them: `SOURCE` is deleted and its name — plus any aliases it had — become aliases of `TARGET`, so every old name keeps resolving, now to `TARGET`'s value. `SOURCE`'s own value is discarded (the command warns and asks for confirmation when the values differ). In the TUI, press `m` on a secret, pick the target with `↑↓` and confirm.
 
 ### Vault storage (file or database)
 
