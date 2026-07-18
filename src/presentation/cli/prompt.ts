@@ -1,8 +1,10 @@
 // Command-line prompts with no TUI dependency: the CLI must work in
 // pipes and scripts, where spinning up a TUI app makes no sense.
 
+import { uiErr } from './ui.ts'
+
 export async function hiddenPrompt(label: string): Promise<string> {
-  process.stderr.write(label)
+  process.stderr.write(uiErr.cyan('? ') + uiErr.bold(label))
   const stdin = process.stdin
   if (!stdin.isTTY) {
     const line = await readLine()
@@ -45,12 +47,48 @@ export async function hiddenPrompt(label: string): Promise<string> {
 }
 
 export async function confirmPrompt(label: string): Promise<boolean> {
-  process.stderr.write(`${label} [y/N] `)
+  process.stderr.write(`${uiErr.cyan('? ')}${uiErr.bold(label)} ${uiErr.dim('[y/N]')} `)
   const answer = (await readLine()).trim().toLowerCase()
   return answer === 'y' || answer === 'yes'
 }
 
-async function readLine(): Promise<string> {
-  for await (const line of console) return line
-  return ''
+// Reads a line from process.stdin directly. The `console` async iterator
+// locks stdin's ReadableStream in Bun, which breaks any later prompt in the
+// same run (e.g. a confirm right after the password prompt). Input beyond the
+// first newline (piped stdin arrives in one chunk) is kept for the next call.
+let pending = ''
+
+export async function readLine(): Promise<string> {
+  const newlineInPending = pending.indexOf('\n')
+  if (newlineInPending !== -1) {
+    const line = pending.slice(0, newlineInPending)
+    pending = pending.slice(newlineInPending + 1)
+    return line.endsWith('\r') ? line.slice(0, -1) : line
+  }
+  const stdin = process.stdin
+  stdin.resume()
+  return new Promise((resolve) => {
+    const finish = (line: string) => {
+      stdin.off('data', onData)
+      stdin.off('end', onEnd)
+      stdin.pause()
+      resolve(line.endsWith('\r') ? line.slice(0, -1) : line)
+    }
+    const onData = (chunk: Buffer) => {
+      pending += chunk.toString('utf8')
+      const newline = pending.indexOf('\n')
+      if (newline !== -1) {
+        const line = pending.slice(0, newline)
+        pending = pending.slice(newline + 1)
+        finish(line)
+      }
+    }
+    const onEnd = () => {
+      const line = pending
+      pending = ''
+      finish(line)
+    }
+    stdin.on('data', onData)
+    stdin.on('end', onEnd)
+  })
 }
