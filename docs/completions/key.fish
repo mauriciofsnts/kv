@@ -41,5 +41,5 @@ complete -c key -s h -l help -d 'Show help'
 
 complete -c key -n '__fish_seen_subcommand_from get rm set alias' -a '(__key_names)'
 complete -c key -n '__fish_seen_subcommand_from apply' -a 'all (__key_names)'
-complete -c key -n '__fish_seen_subcommand_from alias' -a 'add rm'
+complete -c key -n '__fish_seen_subcommand_from alias' -a 'add rm move'
 complete -c key -n '__fish_seen_subcommand_from share import' -a '(__key_groups)'
