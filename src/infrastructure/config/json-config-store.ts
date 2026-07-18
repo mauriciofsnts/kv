@@ -16,6 +16,13 @@ export function configPath(): string {
 
 interface KeyConfig {
   vault?: string
+  forceApply?: boolean
+}
+
+function writeConfig(config: KeyConfig): void {
+  const path = configPath()
+  mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
+  writeFileSync(path, JSON.stringify(config, null, 2) + '\n', { mode: 0o600 })
 }
 
 function readConfig(): KeyConfig {
@@ -38,15 +45,24 @@ export const jsonConfigStore: ConfigStore = {
   },
 
   setVaultLocation(location: string): void {
-    const path = configPath()
-    mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
-    writeFileSync(path, JSON.stringify({ ...readConfig(), vault: location }, null, 2) + '\n', {
-      mode: 0o600,
-    })
+    writeConfig({ ...readConfig(), vault: location })
   },
 
   locationOverridden(): boolean {
     return Boolean(process.env.KEY_VAULT_PATH)
+  },
+
+  // Resolution: KEY_FORCE_APPLY env ("1"/"true"/"0"/"false") > config.json
+  // "forceApply" > off.
+  forceApply(): boolean {
+    const raw = process.env.KEY_FORCE_APPLY?.toLowerCase()
+    if (raw === '1' || raw === 'true') return true
+    if (raw === '0' || raw === 'false') return false
+    return readConfig().forceApply === true
+  },
+
+  setForceApply(value: boolean): void {
+    writeConfig({ ...readConfig(), forceApply: value })
   },
 
   minPasswordLength(): number {
