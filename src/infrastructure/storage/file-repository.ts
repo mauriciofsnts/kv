@@ -1,7 +1,8 @@
-import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import type { EncryptedEnvelope, VaultRepository } from '../../application/ports.ts'
 import { VaultNotFoundError } from '../../domain/errors.ts'
+import { renameWithRetry } from '../fs-atomic.ts'
 
 export class FileRepository implements VaultRepository {
   readonly kind = 'file'
@@ -23,6 +24,6 @@ export class FileRepository implements VaultRepository {
     if (existsSync(this.location)) copyFileSync(this.location, this.location + '.bak')
     const tmp = this.location + '.tmp'
     writeFileSync(tmp, serialized, { mode: 0o600 })
-    renameSync(tmp, this.location)
+    renameWithRetry(tmp, this.location)
   }
 }

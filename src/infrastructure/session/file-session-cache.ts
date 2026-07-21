@@ -2,7 +2,7 @@
 // password) with an expiry, renewed on each use. Lives in tmpfs
 // (XDG_RUNTIME_DIR) when available so it vanishes on reboot.
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { homedir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import type { SessionCache } from '../../application/ports.ts'
 
@@ -21,6 +21,12 @@ export function sessionPath(): { path: string; volatile: boolean } {
   }
   const runtimeDir = process.env.XDG_RUNTIME_DIR
   if (runtimeDir) return { path: join(runtimeDir, 'kv', 'session'), volatile: true }
+  // Windows has no tmpfs-backed runtime dir; %TEMP% isn't reliably cleared on
+  // reboot either, so this is `volatile: false` same as the Unix fallback —
+  // the TTL below is the only real expiry guarantee on this platform.
+  if (process.platform === 'win32') {
+    return { path: join(tmpdir(), 'kv', 'session'), volatile: false }
+  }
   return { path: join(homedir(), '.cache', 'kv', 'session'), volatile: false }
 }
 
