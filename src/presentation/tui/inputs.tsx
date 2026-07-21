@@ -41,6 +41,10 @@ export function Field({ label, value, width, labelWidth = 8, isFocused, mask, pl
 export function editValue(value: string, key: string, event: KeyEvent): string | null {
   if (key === 'backspace') return value.slice(0, -1)
   if (key === 'u' && event.ctrl) return ''
+  // @termuijs/core reports the space bar as the key name "space" rather
+  // than a literal " " character (see its SPECIAL_KEYS table), so it needs
+  // its own branch alongside the single-character case below.
+  if (key === 'space' && !event.ctrl && !event.alt) return value + ' '
   if (key.length === 1 && !event.ctrl && !event.alt) return value + key
   return null
 }
