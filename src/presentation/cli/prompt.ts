@@ -37,12 +37,20 @@ export async function hiddenPrompt(label: string): Promise<string> {
         bytes.push(byte)
       }
     }
+    // Some Windows consoles intercept Ctrl+C for their own signal handling
+    // before it reaches `onData`, so raw mode would otherwise get stuck on.
+    const onSigint = () => {
+      cleanup()
+      reject(new Error('canceled'))
+    }
     const cleanup = () => {
       stdin.off('data', onData)
+      process.off('SIGINT', onSigint)
       stdin.setRawMode(false)
       stdin.pause()
     }
     stdin.on('data', onData)
+    process.on('SIGINT', onSigint)
   })
 }
 
