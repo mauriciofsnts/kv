@@ -1,12 +1,8 @@
-// The `kv apply` flow: fill real values into a .env file, resolving
+// The `kv apply` flow: fill real values into a config file, resolving
 // canonical names and aliases alike, preserving the file's formatting.
-import {
-  type EnvEntry,
-  appendEnvVar,
-  listEnvVars,
-  parseEnvEntries,
-  setEnvValue,
-} from '../../domain/env-file.ts'
+// Format (.env, .properties, .yaml/.yml, .toml) is chosen by extension —
+// see domain/config-format.ts.
+import { type Entry as EnvEntry, formatFor } from '../../domain/config-format.ts'
 import { listSecrets, resolveSecret } from '../../domain/secret.ts'
 import type { EnvFileGateway } from '../ports.ts'
 import type { Vault } from '../vault.ts'
@@ -34,19 +30,20 @@ export function makeApplyEnv(envFiles: EnvFileGateway) {
     },
 
     applyAll(vault: Vault, group: string, envPath: string, force = false): ApplyAllResult {
+      const format = formatFor(envPath)
       let content = envFiles.read(envPath)
-      const current = new Map(parseEnvEntries(content).map((e) => [e.name, e.value]))
+      const current = new Map(format.parseEntries(content).map((e) => [e.name, e.value]))
       const applied: string[] = []
       const skipped: string[] = []
       const missing: string[] = []
-      for (const { name } of listEnvVars(content)) {
+      for (const { name } of format.listVars(content)) {
         const resolved = resolveSecret(vault.data, group, name)
         if (!resolved) {
           missing.push(name)
         } else if (!force && isSetToOtherValue(current.get(name), resolved.secret.value)) {
           skipped.push(name)
         } else {
-          content = setEnvValue(content, name, resolved.secret.value).content
+          content = format.setValue(content, name, resolved.secret.value).content
           applied.push(name)
         }
       }
@@ -70,12 +67,13 @@ export function makeApplyEnv(envFiles: EnvFileGateway) {
       if (!resolved) {
         throw new Error(`"${name}" does not exist in group "${group}" of the vault.`)
       }
+      const format = formatFor(envPath)
       const content = envFiles.read(envPath)
       if (!force) {
-        const current = parseEnvEntries(content).find((e) => e.name === name)?.value
+        const current = format.parseEntries(content).find((e) => e.name === name)?.value
         if (isSetToOtherValue(current, resolved.secret.value)) return 'skipped'
       }
-      const result = setEnvValue(content, name, resolved.secret.value)
+      const result = format.setValue(content, name, resolved.secret.value)
       if (!result.found) return 'not-in-env'
       envFiles.write(envPath, result.content)
       return 'applied'
@@ -86,7 +84,8 @@ export function makeApplyEnv(envFiles: EnvFileGateway) {
       if (!resolved) {
         throw new Error(`"${name}" does not exist in group "${group}" of the vault.`)
       }
-      envFiles.write(envPath, appendEnvVar(envFiles.read(envPath), name, resolved.secret.value))
+      const format = formatFor(envPath)
+      envFiles.write(envPath, format.appendVar(envFiles.read(envPath), name, resolved.secret.value))
     },
 
     // Template mode: fill every variable of `templatePath` from the vault
@@ -100,26 +99,29 @@ export function makeApplyEnv(envFiles: EnvFileGateway) {
       targetPath: string,
       force = false,
     ): ApplyAllResult {
+      // The template's own format governs both parsing and (since its content,
+      // mutated in place, is what gets written out) the target file's syntax.
+      const format = formatFor(templatePath)
       let content = envFiles.read(templatePath)
       const existing =
         !force && envFiles.exists(targetPath)
-          ? new Map(parseEnvEntries(envFiles.read(targetPath)).map((e) => [e.name, e.value]))
+          ? new Map(format.parseEntries(envFiles.read(targetPath)).map((e) => [e.name, e.value]))
           : new Map<string, string>()
       const applied: string[] = []
       const skipped: string[] = []
       const missing: string[] = []
-      for (const { name } of listEnvVars(content)) {
+      for (const { name } of format.listVars(content)) {
         const resolved = resolveSecret(vault.data, group, name)
         const current = existing.get(name)
         if (!resolved) {
           // Not in the vault, but a value the user set by hand still survives.
-          if (current) content = setEnvValue(content, name, current).content
+          if (current) content = format.setValue(content, name, current).content
           missing.push(name)
         } else if (isSetToOtherValue(current, resolved.secret.value)) {
-          content = setEnvValue(content, name, current!).content
+          content = format.setValue(content, name, current!).content
           skipped.push(name)
         } else {
-          content = setEnvValue(content, name, resolved.secret.value).content
+          content = format.setValue(content, name, resolved.secret.value).content
           applied.push(name)
         }
       }
@@ -127,10 +129,10 @@ export function makeApplyEnv(envFiles: EnvFileGateway) {
       return { applied, skipped, missing }
     },
 
-    // Drift report between a .env file and the vault. Compares values but
+    // Drift report between a config file and the vault. Compares values but
     // only ever returns names.
     diff(vault: Vault, group: string, envPath: string): EnvDiff {
-      const entries = parseEnvEntries(envFiles.read(envPath))
+      const entries = formatFor(envPath).parseEntries(envFiles.read(envPath))
       const envNames = new Set(entries.map((e) => e.name))
       const result: EnvDiff = { inSync: [], differs: [], missingFromVault: [], notInEnv: [] }
       for (const { name, value } of entries) {
@@ -147,7 +149,7 @@ export function makeApplyEnv(envFiles: EnvFileGateway) {
     },
 
     readEntries(envPath: string): EnvEntry[] {
-      return parseEnvEntries(envFiles.read(envPath))
+      return formatFor(envPath).parseEntries(envFiles.read(envPath))
     },
   }
 }

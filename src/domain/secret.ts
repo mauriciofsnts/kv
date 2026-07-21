@@ -16,7 +16,11 @@ export interface VaultData {
 
 export const DEFAULT_GROUP = 'default'
 
-export const NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/
+// Dot-separated segments (each a valid identifier) so a name can address a
+// nested key in a YAML/TOML file (e.g. `database.host`) — see
+// domain/config-format.ts. A dotted name just can't be `export`ed as a
+// shell variable, so it's only usable against non-.env targets.
+export const NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*$/
 
 export function emptyVaultData(): VaultData {
   return { groups: { [DEFAULT_GROUP]: {} } }
