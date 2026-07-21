@@ -1,5 +1,6 @@
-import { existsSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs'
 import type { EnvFileGateway } from '../../application/ports.ts'
+import { renameWithRetry } from '../fs-atomic.ts'
 
 export const fsEnvFiles: EnvFileGateway = {
   exists: (path) => existsSync(path),
@@ -13,6 +14,6 @@ export const fsEnvFiles: EnvFileGateway = {
     const mode = existsSync(target) ? statSync(target).mode & 0o777 : 0o600
     const tmp = target + '.tmp'
     writeFileSync(tmp, content, { mode })
-    renameSync(tmp, target)
+    renameWithRetry(tmp, target)
   },
 }

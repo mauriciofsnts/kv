@@ -31,7 +31,7 @@ Dependencies point strictly inward: `domain` ← `application` ← (`infrastruct
 Cross-cutting flows worth knowing before editing:
 
 - **Vault location**: a plain file path or a database URL (`sqlite://`, `postgres://`, `postgresql://`, `mysql://`, `mariadb://`). Resolution (in `json-config-store.ts`): `KV_VAULT_PATH` env > `~/.config/kv/config.json` (written by `kv vault`) > default file. Only ciphertext ever reaches a repository.
-- **Session**: after unlock, the *derived key* (never the password) is cached in `$XDG_RUNTIME_DIR/kv/session` with a TTL renewed on each use. CLI (`presentation/cli/unlock.ts`) and TUI (`presentation/tui/run.ts`) both call `vaultAccess.openWithSession()` before prompting. `changePassword` rekeys and clears the session.
+- **Session**: after unlock, the *derived key* (never the password) is cached in `$XDG_RUNTIME_DIR/kv/session` with a TTL renewed on each use. On Windows (no `XDG_RUNTIME_DIR`) it falls back to `%TEMP%\kv\session` — not true tmpfs, so the TTL is the only real expiry guarantee there (see `sessionPath()` in `file-session-cache.ts`). CLI (`presentation/cli/unlock.ts`) and TUI (`presentation/tui/run.ts`) both call `vaultAccess.openWithSession()` before prompting. `changePassword` rekeys and clears the session.
 - **Alias resolution** (`domain/secret.ts`): `resolveSecret` matches canonical names *and* aliases; `get`/`apply` go through it, while mutations validate via `ownerOfName` (an alias may not shadow any name/alias in its group). Mutation validation lives in the `manage-secrets` use case — don't duplicate it in presentation.
 - **`.env` patching** (`domain/env-file.ts`): line-preserving by design — comments, order, `export` prefix, CRLF, missing trailing newline all survive. Duplicated variables are all updated on purpose. Don't replace this with a generic dotenv library; round-trip fidelity is the point.
 - **Group sharing** (`application/use-cases/share-group.ts`): `kv share`/`kv import`. Payload format v1 is a wire contract — `"kvshare1:" + base64url(salt|iv|tag|ciphertext)` (the legacy `"keyshare1:"` prefix is still accepted on import), gzip inside, scrypt params fixed by the format (don't couple them to infra defaults). The gzip bytes cross the string-based CryptoProvider API via latin1 (byte-faithful). The one-time code is normalized (case/dashes/spaces) before key derivation.
@@ -67,3 +67,12 @@ The published TermUI packages have bugs this code works around. Violating these 
 - All user-facing text, comments, and commit messages are in English; confirmations are `[y/N]`.
 - `apply`/`list` print secret *names* only, never values (`get` is the deliberate exception).
 - Password minimum length comes from `minPasswordLength()` (`KV_MIN_PASSWORD_LENGTH`, default 8) — don't hardcode it.
+
+## Windows/PowerShell notes
+
+- No hardcoded `/` path separators anywhere in `src/` — always `node:path` (`join`/`dirname`). Keep it that way.
+- Clipboard (`presentation/clipboard.ts`) shells out to `powershell.exe` (`Set-Clipboard`/`Get-Clipboard`) on `process.platform === 'win32'`, instead of the Linux `wl-copy`/`xclip`/`xsel` tools. If you touch this file, keep the Windows branch first in `pickTool()`.
+- Atomic writes (`file-repository.ts`, `fs-env-files.ts`) go through `infrastructure/fs-atomic.ts`'s `renameWithRetry` — plain `renameSync` can throw `EPERM`/`EBUSY` on Windows when the destination is locked by another process (editor, AV scan), which is common enough there to need a retry instead of a crash.
+- File `mode: 0o600`/`0o700` on session/config/vault files is a no-op on Windows (ACLs, not POSIX bits) — don't rely on it for a security guarantee on that platform.
+- `bun run build:release` (`scripts/build-release.ts`) includes a `bun-windows-x64` target, packaged as `.zip` (the others are `.tar.gz`) since Bun auto-appends `.exe` for that target.
+- PowerShell completions live at `docs/completions/kv.ps1` alongside the bash/zsh/fish scripts — keep it in sync with `src/index.ts`'s subcommand list the same way.
