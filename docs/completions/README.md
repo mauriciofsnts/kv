@@ -16,6 +16,9 @@ cp kv.bash ~/.local/share/bash-completion/completions/kv
 
 # fish
 cp kv.fish ~/.config/fish/completions/kv.fish
+
+# PowerShell — add to $PROFILE
+. path\to\kv.ps1
 ```
 
 The scripts are static on purpose: they only change when the CLI grows or
