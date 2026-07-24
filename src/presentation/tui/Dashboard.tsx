@@ -1,16 +1,12 @@
-/** @jsxImportSource @termuijs/jsx */
-// NOTE on dimensions: the @termuijs 0.1.7 layout engine does not measure
-// content on the main axis (flexGrow/auto become 0 and the widget vanishes).
-// Every box/text here therefore carries explicit width/height, computed from
-// the terminal size.
-import type { KeyEvent } from '@termuijs/core'
-import { useInput, useKeymap, useRef, useState } from '@termuijs/jsx'
+import { Box, Text, useInput, useWindowSize } from 'ink'
+import { useState } from 'react'
 import { manageSecrets } from '../../composition.ts'
 import { type Secret, getSecret, listGroups, listSecrets } from '../../domain/secret.ts'
 import { CLIPBOARD_CLEAR_SECONDS, copyToClipboard } from '../clipboard.ts'
+import { Confirm } from './components/confirm.tsx'
+import { StatusMessage } from './components/status-message.tsx'
 import { SecretForm } from './SecretForm.tsx'
 import { useTuiStore } from './store.ts'
-import { useTermSize } from './useTermSize.ts'
 
 const MASK = '••••••••'
 const SIDEBAR_WIDTH = 24
@@ -30,27 +26,27 @@ function visibleSecrets(filter: string, secrets: [string, Secret][]): [string, S
 function reportSaveError(err: unknown): void {
   useTuiStore
     .getState()
-    .setStatus(`✗ save failed: ${err instanceof Error ? err.message : String(err)}`)
+    .setStatus(err instanceof Error ? err.message : String(err), 'error')
 }
 
 export function Dashboard() {
-  const { cols, rows } = useTermSize()
+  const { columns: cols, rows } = useWindowSize()
   const mode = useTuiStore((s) => s.mode)
   const panelHeight = Math.max(8, rows - 2)
   const mainWidth = Math.max(40, cols - SIDEBAR_WIDTH - 1)
 
   return (
-    <box flexDirection="column" height={rows} width={cols}>
-      <box flexDirection="row" gap={1} height={panelHeight} width={cols}>
+    <Box flexDirection="column" height={rows} width={cols}>
+      <Box flexDirection="row" gap={1} height={panelHeight} width={cols}>
         <GroupSidebar height={panelHeight} />
         {mode === 'add' || mode === 'edit' ? (
           <FormPanel width={mainWidth} height={panelHeight} />
         ) : (
           <SecretList width={mainWidth} height={panelHeight} />
         )}
-      </box>
+      </Box>
       <Footer width={cols} />
-    </box>
+    </Box>
   )
 }
 
@@ -89,18 +85,16 @@ function GroupSidebar({ height }: PanelProps) {
   const vault = useTuiStore((s) => s.vault)
   const group = useTuiStore((s) => s.group)
   const groups = vault ? listGroups(vault.data) : []
-  const innerWidth = SIDEBAR_WIDTH - 4
 
   return (
-    // "gray" is not in the core 0.1.7 palette and silently kills the render
-    <box flexDirection="column" padding={1} border="round" borderColor="white" width={SIDEBAR_WIDTH} height={height}>
-      <text height={1} width={innerWidth} bold dim>Groups ←/→</text>
+    <Box flexDirection="column" padding={1} borderStyle="round" borderColor="white" width={SIDEBAR_WIDTH} height={height}>
+      <Text bold dimColor>Groups ←/→</Text>
       {groups.map((g) => (
-        <text key={g} height={1} width={innerWidth} color={g === group ? 'cyan' : undefined} bold={g === group}>
+        <Text key={g} color={g === group ? 'cyan' : undefined} bold={g === group} wrap="truncate-end">
           {g === group ? '▸ ' : '  '}{g}
-        </text>
+        </Text>
       ))}
-    </box>
+    </Box>
   )
 }
 
@@ -122,14 +116,14 @@ function SecretList({ width, height }: PanelProps) {
   const windowed = secrets.slice(start, start + maxRows)
 
   return (
-    <box flexDirection="column" padding={1} border="round" borderColor="cyan" width={width} height={height}>
-      <text height={1} width={innerWidth} bold color="cyan">
+    <Box flexDirection="column" padding={1} borderStyle="round" borderColor="cyan" width={width} height={height}>
+      <Text bold color="cyan">
         Secrets · {group}{filter ? `  /${filter}` : ''}
-      </text>
+      </Text>
       {secrets.length === 0 ? (
-        <text height={1} width={innerWidth} dim>
+        <Text dimColor>
           {filter ? 'No matches.' : 'Empty. Press "a" to add.'}
-        </text>
+        </Text>
       ) : (
         windowed.map(([name, secret], offset) => {
           const index = start + offset
@@ -137,29 +131,34 @@ function SecretList({ width, height }: PanelProps) {
           const shown = revealed[name] ? secret.value : MASK
           const aliasBadge = secret.aliases?.length ? ` +${secret.aliases.length}` : ''
           return (
-            <box key={name} flexDirection="row" gap={1} height={1} width={innerWidth}>
-              <text height={1} width={NAME_COL} color={isSelected ? 'cyan' : undefined} bold={isSelected}>
-                {isSelected ? '▸ ' : '  '}{name}{aliasBadge}
-              </text>
-              <text height={1} width={valueCol} dim={!revealed[name]}>{shown}</text>
-              <text height={1} width={DATE_COL} dim>{secret.updatedAt.slice(0, 10)}</text>
-            </box>
+            <Box key={name} flexDirection="row" gap={1} width={innerWidth}>
+              <Box width={NAME_COL}>
+                <Text color={isSelected ? 'cyan' : undefined} bold={isSelected}>
+                  {isSelected ? '▸ ' : '  '}{name}{aliasBadge}
+                </Text>
+              </Box>
+              <Box width={valueCol}>
+                <Text dimColor={!revealed[name]}>{shown}</Text>
+              </Box>
+              <Box width={DATE_COL}>
+                <Text dimColor>{secret.updatedAt.slice(0, 10)}</Text>
+              </Box>
+            </Box>
           )
         })
       )}
       {mode === 'browse' ? <BrowseKeymap count={secrets.length} names={secrets.map(([n]) => n)} /> : null}
       {mode === 'filter' ? <FilterInput width={innerWidth} /> : null}
-      {mode === 'confirm-delete' ? <ConfirmDelete width={innerWidth} names={secrets.map(([n]) => n)} /> : null}
+      {mode === 'confirm-delete' ? <ConfirmDelete names={secrets.map(([n]) => n)} /> : null}
       {mode === 'new-group' ? <NewGroupInput width={innerWidth} /> : null}
       {mode === 'move' ? <MoveTarget width={innerWidth} names={secrets.map(([n]) => n)} /> : null}
-    </box>
+    </Box>
   )
 }
 
 // Browse-mode keymap. Lives in its own component so it is only active in
 // "browse" mode (otherwise "a", "d" etc. would capture form typing). Actions
-// read everything via getState(): keyboard handlers in 0.1.7 can hold on to
-// closures from an old render.
+// read everything via getState() to always see the latest store state.
 function BrowseKeymap({ count, names }: { count: number; names: string[] }) {
   const clampedSelect = (offset: number) => {
     if (count === 0) return
@@ -177,150 +176,132 @@ function BrowseKeymap({ count, names }: { count: number; names: string[] }) {
   const setMode = (mode: 'add' | 'edit' | 'confirm-delete' | 'filter' | 'new-group' | 'move') =>
     useTuiStore.getState().setMode(mode)
 
-  useKeymap([
-    { key: 'up', action: () => clampedSelect(-1) },
-    { key: 'down', action: () => clampedSelect(1) },
-    { key: 'k', action: () => clampedSelect(-1) },
-    { key: 'j', action: () => clampedSelect(1) },
-    { key: 'left', action: () => switchGroup(-1) },
-    { key: 'right', action: () => switchGroup(1) },
-    { key: 'a', action: () => setMode('add') },
-    { key: 'e', action: () => { if (count > 0) setMode('edit') } },
-    { key: 'd', action: () => { if (count > 0) setMode('confirm-delete') } },
-    {
-      key: 'v',
-      action: () => {
-        const s = useTuiStore.getState()
-        const name = names[s.selected]
-        if (name) s.toggleReveal(name)
-      },
-    },
-    {
-      key: 'c',
-      action: () => {
-        const s = useTuiStore.getState()
-        const name = names[s.selected]
-        const secret = s.vault && name ? getSecret(s.vault.data, s.group, name) : undefined
-        if (!name || !secret) return
-        copyToClipboard(secret.value)
-          .then(() => s.setStatus(`✓ ${name} copied (clears in ${CLIPBOARD_CLEAR_SECONDS}s)`))
-          .catch((err: unknown) =>
-            s.setStatus(`✗ ${err instanceof Error ? err.message : String(err)}`),
-          )
-      },
-    },
-    {
-      key: 'm',
-      action: () => {
-        // Needs at least a source and one other secret to move onto.
-        if (count < 2) return
-        const s = useTuiStore.getState()
-        const name = names[s.selected]
-        if (!name) return
-        s.setMoveSource(name)
-        s.setMode('move')
-      },
-    },
-    { key: '/', action: () => setMode('filter') },
-    { key: 'g', action: () => setMode('new-group') },
-    { key: 'escape', action: () => useTuiStore.getState().setFilter('') },
-    { key: 'q', action: () => process.exit(0) },
-    { key: 'c', ctrl: true, action: () => process.exit(0) },
-  ])
+  useInput((input, key) => {
+    if (key.upArrow || input === 'k') clampedSelect(-1)
+    else if (key.downArrow || input === 'j') clampedSelect(1)
+    else if (key.leftArrow) switchGroup(-1)
+    else if (key.rightArrow) switchGroup(1)
+    else if (input === 'a') setMode('add')
+    else if (input === 'e') { if (count > 0) setMode('edit') }
+    else if (input === 'd') { if (count > 0) setMode('confirm-delete') }
+    else if (input === 'v') {
+      const s = useTuiStore.getState()
+      const name = names[s.selected]
+      if (name) s.toggleReveal(name)
+    } else if (input === 'c') {
+      const s = useTuiStore.getState()
+      const name = names[s.selected]
+      const secret = s.vault && name ? getSecret(s.vault.data, s.group, name) : undefined
+      if (!name || !secret) return
+      copyToClipboard(secret.value)
+        .then(() => s.setStatus(`${name} copied (clears in ${CLIPBOARD_CLEAR_SECONDS}s)`, 'success'))
+        .catch((err: unknown) => s.setStatus(err instanceof Error ? err.message : String(err), 'error'))
+    } else if (input === 'm') {
+      // Needs at least a source and one other secret to move onto.
+      if (count < 2) return
+      const s = useTuiStore.getState()
+      const name = names[s.selected]
+      if (!name) return
+      s.setMoveSource(name)
+      s.setMode('move')
+    } else if (input === '/') setMode('filter')
+    else if (input === 'g') setMode('new-group')
+    else if (key.escape) useTuiStore.getState().setFilter('')
+    else if (input === 'q') process.exit(0)
+  })
   return null
 }
 
 function FilterInput({ width }: { width: number }) {
   const filter = useTuiStore((s) => s.filter)
 
-  useInput((key: string, event: KeyEvent) => {
+  useInput((input, key) => {
     const s = useTuiStore.getState()
-    if (key === 'escape' || key === 'esc') {
+    if (key.escape) {
       s.setFilter('')
       s.setMode('browse')
       return
     }
-    if (key === 'enter' || key === 'return') {
+    if (key.return) {
       s.setMode('browse')
       return
     }
-    if (key === 'backspace') {
+    if (key.backspace || key.delete) {
       s.setFilter(s.filter.slice(0, -1))
       return
     }
-    if (key.length === 1 && !event.ctrl && !event.alt) s.setFilter(s.filter + key)
+    if (input.length === 1 && !key.ctrl && !key.meta) s.setFilter(s.filter + input)
   })
 
-  return <text height={1} width={width} color="yellow">search: {filter}▏ (Enter keeps, Esc clears)</text>
+  return (
+    <Box width={width}>
+      <Text color="yellow">search: {filter}▏ (Enter keeps, Esc clears)</Text>
+    </Box>
+  )
 }
 
-function ConfirmDelete({ width, names }: { width: number; names: string[] }) {
+function ConfirmDelete({ names }: { names: string[] }) {
   const selected = useTuiStore((s) => s.selected)
   const name = names[selected]
 
-  useKeymap([
-    {
-      key: 'y',
-      action: () => {
-        const s = useTuiStore.getState()
-        const target = names[s.selected]
-        if (s.vault && target) {
-          manageSecrets
-            .deleteSecret(s.vault, s.group, target)
-            .catch(reportSaveError)
-          s.setStatus(`✓ ${target} removed`)
-          s.setSelected(Math.max(0, s.selected - 1))
-        }
-        s.setMode('browse')
-      },
-    },
-    { key: 'n', action: () => useTuiStore.getState().setMode('browse') },
-    { key: 'escape', action: () => useTuiStore.getState().setMode('browse') },
-  ])
+  const doDelete = () => {
+    const s = useTuiStore.getState()
+    const target = names[s.selected]
+    if (s.vault && target) {
+      manageSecrets.deleteSecret(s.vault, s.group, target).catch(reportSaveError)
+      s.setStatus(`${target} removed`, 'success')
+      s.setSelected(Math.max(0, s.selected - 1))
+    }
+    s.setMode('browse')
+  }
+  const cancel = () => useTuiStore.getState().setMode('browse')
 
-  return <text height={1} width={width} color="red">Remove {name}? [y/n]</text>
+  useInput((_input, key) => {
+    if (key.escape) cancel()
+  })
+
+  return <Confirm message={`Remove ${name}?`} variant="danger" onConfirm={doDelete} onCancel={cancel} />
 }
 
 function NewGroupInput({ width }: { width: number }) {
   const [name, setName] = useState('')
-  const nameRef = useRef('')
-  nameRef.current = name
 
-  useInput((key: string, event: KeyEvent) => {
+  useInput((input, key) => {
     const s = useTuiStore.getState()
-    if (key === 'escape' || key === 'esc') {
+    if (key.escape) {
       s.setMode('browse')
       return
     }
-    if (key === 'enter' || key === 'return') {
-      const trimmed = nameRef.current.trim()
+    if (key.return) {
+      const trimmed = name.trim()
       if (s.vault && trimmed) {
         manageSecrets.createGroup(s.vault, trimmed).catch(reportSaveError)
         s.setGroup(trimmed)
-        s.setStatus(`✓ group "${trimmed}" created`)
+        s.setStatus(`group "${trimmed}" created`, 'success')
       }
       s.setMode('browse')
       return
     }
-    if (key === 'backspace') {
-      setName((n: string) => n.slice(0, -1))
+    if (key.backspace || key.delete) {
+      setName((n) => n.slice(0, -1))
       return
     }
-    if (key.length === 1 && !event.ctrl && !event.alt) setName((n: string) => n + key)
+    if (input.length === 1 && !key.ctrl && !key.meta) setName((n) => n + input)
   })
 
-  return <text height={1} width={width} color="yellow">new group: {name}▏ (Enter creates, Esc cancels)</text>
+  return (
+    <Box width={width}>
+      <Text color="yellow">new group: {name}▏ (Enter creates, Esc cancels)</Text>
+    </Box>
+  )
 }
 
 // Move-as-alias flow: ↑↓ pick the target, Enter asks to confirm, y applies.
-// The source's value is discarded (the target's wins); the confirm line warns
-// when that actually loses data. Handlers read state via getState()/refs —
-// 0.1.7 keyboard handlers can retain closures from old renders — and the
-// component (with its input hook) only exists while mode === 'move'.
+// The source's value is discarded (the target's wins); the confirm line
+// warns when that actually loses data. The component (with its input hook)
+// only exists while mode === 'move'.
 function MoveTarget({ width, names }: { width: number; names: string[] }) {
   const [confirming, setConfirming] = useState(false)
-  const confirmingRef = useRef(false)
-  confirmingRef.current = confirming
   const source = useTuiStore((s) => s.moveSource)
   const selected = useTuiStore((s) => s.selected)
   const vault = useTuiStore((s) => s.vault)
@@ -334,7 +315,7 @@ function MoveTarget({ width, names }: { width: number; names: string[] }) {
         .mergeAsAlias(s.vault, s.group, s.moveSource, target)
         .then(({ target: canonical, moved }) => {
           const st = useTuiStore.getState()
-          st.setStatus(`✓ ${moved.join(', ')} → ${canonical}`)
+          st.setStatus(`${moved.join(', ')} → ${canonical}`, 'success')
           st.setSelected(0)
         })
         .catch(reportSaveError)
@@ -343,10 +324,10 @@ function MoveTarget({ width, names }: { width: number; names: string[] }) {
     s.setMode('browse')
   }
 
-  useInput((key: string) => {
+  useInput((input, key) => {
     const s = useTuiStore.getState()
-    if (key === 'escape' || key === 'esc') {
-      if (confirmingRef.current) {
+    if (key.escape) {
+      if (confirming) {
         setConfirming(false)
         return
       }
@@ -354,23 +335,23 @@ function MoveTarget({ width, names }: { width: number; names: string[] }) {
       s.setMode('browse')
       return
     }
-    if (confirmingRef.current) {
-      if (key === 'y') apply()
-      else if (key === 'n') setConfirming(false)
+    if (confirming) {
+      if (input === 'y') apply()
+      else if (input === 'n') setConfirming(false)
       return
     }
-    if ((key === 'up' || key === 'k') && names.length > 0) {
+    if ((key.upArrow || input === 'k') && names.length > 0) {
       s.setSelected((s.selected - 1 + names.length) % names.length)
       return
     }
-    if ((key === 'down' || key === 'j') && names.length > 0) {
+    if ((key.downArrow || input === 'j') && names.length > 0) {
       s.setSelected((s.selected + 1) % names.length)
       return
     }
-    if (key === 'enter' || key === 'return') {
+    if (key.return) {
       const target = names[s.selected]
       if (!target || target === s.moveSource) {
-        s.setStatus('✗ pick a different secret as the target')
+        s.setStatus('pick a different secret as the target', 'error')
         return
       }
       setConfirming(true)
@@ -383,26 +364,31 @@ function MoveTarget({ width, names }: { width: number; names: string[] }) {
       vault &&
       getSecret(vault.data, group, source)?.value !== getSecret(vault.data, group, target)?.value
     return (
-      <text height={1} width={width} color="red">
-        {source} becomes an alias of {target}{valuesDiffer ? ' — values differ, its value is discarded' : ''}. [y/n]
-      </text>
+      <Box width={width}>
+        <Text color="red">
+          {source} becomes an alias of {target}{valuesDiffer ? ' — values differ, its value is discarded' : ''}. [y/n]
+        </Text>
+      </Box>
     )
   }
   return (
-    <text height={1} width={width} color="yellow">
-      move: {source} → {target ?? '?'} (↑↓ target · Enter confirm · Esc cancel)
-    </text>
+    <Box width={width}>
+      <Text color="yellow">
+        move: {source} → {target ?? '?'} (↑↓ target · Enter confirm · Esc cancel)
+      </Text>
+    </Box>
   )
 }
 
 function Footer({ width }: { width?: number }) {
   const status = useTuiStore((s) => s.status)
+  const statusVariant = useTuiStore((s) => s.statusVariant)
   return (
-    <box flexDirection="column" height={2} width={width}>
-      <text height={1} width={width} color="green">{status || ' '}</text>
-      <text height={1} width={width} dim>
+    <Box flexDirection="column" height={2} width={width}>
+      {status ? <StatusMessage variant={statusVariant}>{status}</StatusMessage> : <Text> </Text>}
+      <Text dimColor>
         ↑↓ move · ←→ group · a add · e edit · d delete · v reveal · c copy · m alias · / search · g new group · q quit
-      </text>
-    </box>
+      </Text>
+    </Box>
   )
 }

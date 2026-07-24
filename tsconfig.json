@@ -6,7 +6,6 @@
     "lib": ["ESNext"],
     "types": ["bun-types"],
     "jsx": "react-jsx",
-    "jsxImportSource": "@termuijs/jsx",
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noEmit": true,

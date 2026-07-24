@@ -1,8 +1,8 @@
-/** @jsxImportSource @termuijs/jsx */
-import type { KeyEvent } from '@termuijs/core'
-import { useInput, useRef, useState } from '@termuijs/jsx'
+import { Box, Text, useFocusManager, useInput } from 'ink'
+import { useState } from 'react'
 import { manageSecrets } from '../../composition.ts'
-import { Field, editValue } from './inputs.tsx'
+import { FormField } from './components/form-field.tsx'
+import { TextInput } from './components/text-input.tsx'
 import { useTuiStore } from './store.ts'
 
 interface SecretFormProps {
@@ -14,11 +14,11 @@ interface SecretFormProps {
   initialAliases?: string[]
 }
 
-const FIELD_COUNT = 4
-
-// Add/edit form: a single useInput routes navigation (Tab/↑↓), Enter
-// (save), Esc (cancel) and text editing to the focused field. Validation
-// and persistence live in the manageSecrets use case, shared with the CLI.
+// Add/edit form: each field is a vendored TextInput with its own onSubmit,
+// so Enter saves from whichever field is focused — Tab/Shift+Tab cycling
+// between fields is native via Ink's FocusManager (useFocus), no manual
+// focus index needed. Validation and persistence live in the manageSecrets
+// use case, shared with the CLI.
 export function SecretForm({
   width,
   height,
@@ -27,21 +27,11 @@ export function SecretForm({
   initialNote = '',
   initialAliases = [],
 }: SecretFormProps) {
-  const [fields, setFields] = useState([
-    initialName,
-    initialValue,
-    initialNote,
-    initialAliases.join(', '),
-  ])
-  const [focused, setFocused] = useState(0)
+  const [name, setName] = useState(initialName)
+  const [value, setValue] = useState(initialValue)
+  const [note, setNote] = useState(initialNote)
+  const [aliasesText, setAliasesText] = useState(initialAliases.join(', '))
   const [error, setError] = useState('')
-
-  // Refs mirror the state: the useInput handler may hold a closure from an
-  // old render and needs the current values when Enter/Tab arrive.
-  const fieldsRef = useRef(fields)
-  fieldsRef.current = fields
-  const focusedRef = useRef(0)
-  focusedRef.current = focused
 
   const vault = useTuiStore((s) => s.vault)
   const group = useTuiStore((s) => s.group)
@@ -49,68 +39,63 @@ export function SecretForm({
   const setMode = useTuiStore((s) => s.setMode)
   const setStatus = useTuiStore((s) => s.setStatus)
 
-  const [name, value, note, aliasesText] = fields as [string, string, string, string]
   const innerWidth = width - 4
 
   const save = async () => {
     if (!vault) return
-    const [currentName, currentValue, currentNote, currentAliases] = fieldsRef.current as [
-      string,
-      string,
-      string,
-      string,
-    ]
     try {
       const savedName = await manageSecrets.saveSecret(vault, group, {
-        name: currentName,
-        value: currentValue,
-        note: currentNote,
-        aliases: currentAliases.split(/[,\s]+/).filter((a) => a !== ''),
+        name,
+        value,
+        note,
+        aliases: aliasesText.split(/[,\s]+/).filter((a) => a !== ''),
         previousName: mode === 'edit' ? initialName : undefined,
       })
-      setStatus(`✓ ${savedName} saved to group "${group}"`)
+      setStatus(`${savedName} saved to group "${group}"`, 'success')
       setMode('browse')
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     }
   }
 
-  useInput((key: string, event: KeyEvent) => {
-    if (event.ctrl && key === 'c') process.exit(0)
-    if (key === 'escape' || key === 'esc') {
+  const { focusNext, focusPrevious } = useFocusManager()
+
+  useInput((input, key) => {
+    if (key.ctrl && input === 'c') process.exit(0)
+    if (key.escape) {
       setMode('browse')
       return
     }
-    if (key === 'tab' || key === 'down') {
-      setFocused((f: number) => (f + (event.shift ? FIELD_COUNT - 1 : 1)) % FIELD_COUNT)
-      return
-    }
-    if (key === 'up') {
-      setFocused((f: number) => (f + FIELD_COUNT - 1) % FIELD_COUNT)
-      return
-    }
-    if (key === 'enter' || key === 'return') {
-      void save()
-      return
-    }
-    setFields((current: string[]) => {
-      const index = focusedRef.current
-      const edited = editValue(current[index]!, key, event)
-      return edited !== null ? current.map((f, i) => (i === index ? edited : f)) : current
-    })
+    // Tab/Shift+Tab already cycle focus natively via Ink's FocusManager;
+    // ↑↓ do the same for parity with the rest of the app's navigation.
+    if (key.downArrow) focusNext()
+    if (key.upArrow) focusPrevious()
   })
 
   return (
-    <box flexDirection="column" padding={1} border="round" borderColor="yellow" gap={1} width={width} height={height}>
-      <text height={1} width={innerWidth} bold color="yellow">
-        {mode === 'edit' ? `Edit ${initialName}` : 'New secret'}
-      </text>
-      <Field label="Name:" value={name} width={innerWidth} isFocused={focused === 0} placeholder="POSTGRES_DB" />
-      <Field label="Value:" value={value} width={innerWidth} isFocused={focused === 1} placeholder="secret value" />
-      <Field label="Note:" value={note} width={innerWidth} isFocused={focused === 2} placeholder="(optional)" />
-      <Field label="Aliases:" value={aliasesText} width={innerWidth} isFocused={focused === 3} placeholder="DB_URL, POSTGRES_URL (optional)" />
-      {error ? <text height={1} width={innerWidth} color="red">{error}</text> : null}
-      <text height={1} width={innerWidth} dim>Tab/↑↓ fields · Enter saves · Esc cancels</text>
-    </box>
+    <Box flexDirection="column" padding={1} borderStyle="round" borderColor="yellow" gap={1} width={width} height={height}>
+      <Text bold color="yellow">{mode === 'edit' ? `Edit ${initialName}` : 'New secret'}</Text>
+      <FormField label="Name">
+        <TextInput value={name} onChange={setName} onSubmit={save} placeholder="POSTGRES_DB" width={innerWidth} bordered={false} autoFocus />
+      </FormField>
+      <FormField label="Value">
+        <TextInput value={value} onChange={setValue} onSubmit={save} placeholder="secret value" width={innerWidth} bordered={false} />
+      </FormField>
+      <FormField label="Note">
+        <TextInput value={note} onChange={setNote} onSubmit={save} placeholder="(optional)" width={innerWidth} bordered={false} />
+      </FormField>
+      <FormField label="Aliases">
+        <TextInput
+          value={aliasesText}
+          onChange={setAliasesText}
+          onSubmit={save}
+          placeholder="DB_URL, POSTGRES_URL (optional)"
+          width={innerWidth}
+          bordered={false}
+        />
+      </FormField>
+      {error ? <Text color="red">{error}</Text> : null}
+      <Text dimColor>Tab/↑↓ fields · Enter saves · Esc cancels</Text>
+    </Box>
   )
 }
