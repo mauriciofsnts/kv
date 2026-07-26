@@ -131,6 +131,10 @@ export function makeShareGroup(
     ): Promise<ImportResult> {
       const result: ImportResult = { added: [], replaced: [], skipped: [] }
       for (const [name, secret] of Object.entries(share.secrets)) {
+        // `name` comes from a decrypted, attacker-authorable payload; as a
+        // bracketed assignment target further down, "__proto__" would set
+        // the group object's prototype instead of storing a secret.
+        if (name === '__proto__') continue
         const owner = ownerOfName(vault.data, targetGroup, name)
         if (owner && owner !== name) {
           result.skipped.push({ name, owner })
