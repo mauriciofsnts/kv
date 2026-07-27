@@ -1,14 +1,14 @@
-/** @jsxImportSource @termuijs/jsx */
-import { ErrorBoundary } from '@termuijs/jsx'
+import { ErrorBoundary } from './components/error-boundary.tsx'
 import { Dashboard } from './Dashboard.tsx'
+import { ThemeProvider } from './theme/theme-provider.tsx'
 import { UnlockScreen } from './UnlockScreen.tsx'
 import { useTuiStore } from './store.ts'
 
 export function App() {
   const vault = useTuiStore((s) => s.vault)
   return (
-    <ErrorBoundary fallback={(err: Error) => <text color="red">Error: {err.message}</text>}>
-      {vault ? <Dashboard /> : <UnlockScreen />}
-    </ErrorBoundary>
+    <ThemeProvider>
+      <ErrorBoundary>{vault ? <Dashboard /> : <UnlockScreen />}</ErrorBoundary>
+    </ThemeProvider>
   )
 }

@@ -1,4 +1,4 @@
-import { createStore } from '@termuijs/store'
+import { create } from 'zustand'
 import type { Vault } from '../../application/vault.ts'
 
 export type Mode =
@@ -11,6 +11,8 @@ export type Mode =
   | 'new-group'
   | 'move'
 
+export type StatusVariant = 'success' | 'error'
+
 interface TuiState {
   vault: Vault | null
   group: string
@@ -19,6 +21,7 @@ interface TuiState {
   filter: string
   revealed: Record<string, boolean>
   status: string
+  statusVariant: StatusVariant
   // Secret being turned into an alias while mode === 'move'.
   moveSource: string | null
 
@@ -29,10 +32,10 @@ interface TuiState {
   setSelected: (index: number) => void
   setFilter: (filter: string) => void
   toggleReveal: (name: string) => void
-  setStatus: (status: string) => void
+  setStatus: (status: string, variant?: StatusVariant) => void
 }
 
-export const useTuiStore = createStore<TuiState>((set) => ({
+export const useTuiStore = create<TuiState>()((set) => ({
   vault: null,
   group: 'default',
   mode: 'unlock',
@@ -40,6 +43,7 @@ export const useTuiStore = createStore<TuiState>((set) => ({
   filter: '',
   revealed: {},
   status: '',
+  statusVariant: 'success',
   moveSource: null,
 
   setVault: (vault) => set({ vault, mode: 'browse' }),
@@ -50,5 +54,5 @@ export const useTuiStore = createStore<TuiState>((set) => ({
   setFilter: (filter) => set({ filter, selected: 0 }),
   toggleReveal: (name) =>
     set((s) => ({ revealed: { ...s.revealed, [name]: !s.revealed[name] } })),
-  setStatus: (status) => set({ status }),
+  setStatus: (status, variant = 'success') => set({ status, statusVariant: variant }),
 }))

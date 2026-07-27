@@ -20,9 +20,10 @@ export async function runTui(): Promise<void> {
     if (!(err instanceof WrongPasswordError)) throw err
   }
 
-  // Late import: only bring up the JSX runtime when the TUI is actually used.
-  const { render } = await import('@termuijs/jsx')
-  const { jsx } = await import('@termuijs/jsx/jsx-runtime')
+  // Late import: only bring up Ink/React when the TUI is actually used.
+  const { render } = await import('ink')
+  const { createElement } = await import('react')
   const { App } = await import('./App.tsx')
-  await render(jsx(App, {}))
+  const instance = render(createElement(App))
+  await instance.waitUntilExit()
 }

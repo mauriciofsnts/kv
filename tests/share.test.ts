@@ -3,7 +3,11 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { ConfigStore, SessionCache } from '../src/application/ports.ts'
-import { makeShareGroup, normalizeShareCode } from '../src/application/use-cases/share-group.ts'
+import {
+  makeShareGroup,
+  normalizeShareCode,
+  type SharePayload,
+} from '../src/application/use-cases/share-group.ts'
 import { makeVaultAccess } from '../src/application/use-cases/vault-access.ts'
 import { DEFAULT_GROUP, addAliases, getSecret, setSecret } from '../src/domain/secret.ts'
 import { nodeCrypto } from '../src/infrastructure/crypto/node-crypto.ts'
@@ -148,6 +152,27 @@ describe('share/import', () => {
 
     await receiverBed.share.importShare(receiver, 'g', decoded)
     expect(getSecret(receiver.data, 'g', 'DB')?.aliases).toEqual(['DB_URL'])
+  })
+
+  test('a "__proto__" entry in the payload is ignored, not stored as a secret', async () => {
+    const { access, share } = testbed
+    const receiver = await access.initVault('password-123')
+
+    // Built via JSON.parse, like the real decodeShare path, so "__proto__"
+    // lands as a plain own property of `secrets` rather than triggering the
+    // object-literal prototype-setting special case.
+    const malicious = JSON.parse(
+      JSON.stringify({
+        v: 1,
+        group: 'g',
+        secrets: { SAFE: { value: 'ok' }, __proto__: { value: 'evil' } },
+      }),
+    ) as SharePayload
+
+    const result = await share.importShare(receiver, 'g', malicious)
+    expect(result.added).toEqual(['SAFE'])
+    expect(getSecret(receiver.data, 'g', 'SAFE')?.value).toBe('ok')
+    expect(Object.getPrototypeOf(receiver.data.groups['g'])).toBe(Object.prototype)
   })
 
   test('two shares of the same group produce different payloads and codes', async () => {

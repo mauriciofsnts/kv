@@ -26,7 +26,7 @@ Dependencies point strictly inward: `domain` ← `application` ← (`infrastruct
 - **`src/domain/`** — entities and pure business rules; zero imports from other layers, zero I/O. `secret.ts` (groups/secrets/aliases operations on plain `VaultData`), `env-file.ts` (the line-preserving .env parser), `errors.ts`.
 - **`src/application/`** — `ports.ts` (interfaces: `CryptoProvider`, `VaultRepository`, `SessionCache`, `ConfigStore`, `EnvFileGateway`, plus the `EncryptedEnvelope`/`KdfParams` contracts) and `use-cases/` (factories taking ports: `vault-access` for init/unlock/save/rekey/session, `manage-secrets` for validated mutations shared by CLI and TUI, `apply-env`, `relocate-vault`). `vault.ts` defines the unlocked-`Vault` handle (data + key + kdf + repository).
 - **`src/infrastructure/`** — port implementations: `crypto/node-crypto.ts` (scrypt + AES-256-GCM; bad password → `WrongPasswordError` from GCM auth), `storage/` (file repository with `.tmp`+rename+`.bak`; SQL repository over `Bun.SQL` — single-row `key_vault` table, previous version in a `previous` column, dialect-portable SELECT then UPDATE/INSERT; `repository-factory.ts` picks by URL scheme), `session/file-session-cache.ts`, `config/json-config-store.ts`, `env/fs-env-files.ts`.
-- **`src/presentation/`** — `cli/` (subcommands dispatched from `src/index.ts` via `util.parseArgs`; raw-mode hidden prompts in `cli/prompt.ts` — secret values never pass through argv) and `tui/` (TermUI app, dynamically imported only when `kv` runs bare). Presentation imports use cases from `src/composition.ts` and domain read functions directly; it must never import `src/infrastructure/`.
+- **`src/presentation/`** — `cli/` (subcommands dispatched from `src/index.ts` via `util.parseArgs`; raw-mode hidden prompts in `cli/prompt.ts` — secret values never pass through argv) and `tui/` (Ink app, dynamically imported only when `kv` runs bare). Presentation imports use cases from `src/composition.ts` and domain read functions directly; it must never import `src/infrastructure/`.
 
 Cross-cutting flows worth knowing before editing:
 
@@ -50,17 +50,19 @@ tmux capture-pane -t key -p     # inspect the rendered screen
 
 Send keys with small `sleep`s between actions — bursts can race a re-render.
 
-## @termuijs 0.1.7 landmines (TUI only)
+## Ink / termcn (TUI only)
 
-The published TermUI packages have bugs this code works around. Violating these fails **silently** (blank screen, dead keys):
+The TUI is built on [Ink](https://github.com/vadimdemedes/ink) (a real React renderer with Yoga flexbox) plus a handful of components adapted from the [termcn](https://github.com/shadcn-labs/termcn) registry.
 
-- The layout engine does not measure content: every `box`/`text` needs explicit `width` and `height`; `flexGrow`/auto collapse to 0 and the subtree vanishes.
-- Colors outside the named palette (e.g. `gray`) abort the entire render pass. Stick to basics (`cyan`, `white`, `red`, `yellow`, `green`).
-- `useTerminalSize()` returns 0×0 — use `presentation/tui/useTermSize.ts` instead.
-- Don't use the framework's `TextInput`/`PasswordInput` widgets: they are focusable, and the App's FocusManager then routes all keys to them (swallowing Tab/Enter). Forms use the hand-rolled `Field` + `editValue` in `presentation/tui/inputs.tsx`, with the parent owning focus.
-- `useInput`/`useKeymap` handlers can retain closures from old renders: read state via `useTuiStore.getState()` or refs inside handlers, never from captured variables; use functional `setState` updates.
-- Every `.tsx` file needs the `/** @jsxImportSource @termuijs/jsx */` pragma — Bun only reads `tsconfig.json` from the cwd, and `kv` runs from arbitrary directories.
+- termcn is a shadcn/ui-style registry, not an npm package: components are vendored source, not a dependency. They live under `presentation/tui/components/` (`text-input.tsx`, `password-input.tsx`, `form-field.tsx`, `confirm.tsx`, `status-message.tsx`, `error-boundary.tsx`) and `presentation/tui/theme/` (`theme-provider.tsx`, `default.ts`, `types.ts`). Edit them directly when they need to change — there's no upstream package to bump.
+- Ink's Yoga layout engine actually measures content, unlike the old termui setup, so `flexGrow`/auto no longer collapse to 0. `GroupSidebar`/`SecretList` in `Dashboard.tsx` still carry explicit widths for now (ported as-is to avoid visual regressions), but new components don't need to.
+- `Text` has no `width`/`height` props (only `Box` does) — wrap text in a sized `Box` when you need to constrain it, e.g. for column layouts.
+- Tab/Shift+Tab focus-cycling between the vendored `TextInput`/`PasswordInput` fields is native, via Ink's own `useFocus`/`FocusManager` — no manual focus-index state needed. `SecretForm.tsx` also wires ↑↓ to `useFocusManager().focusNext/focusPrevious` for parity with the rest of the app's navigation.
+- Ink's `useInput` has no stale-closure problem (it's built on React's `useEffectEvent`), but the "one `useInput` per active-mode component, read everything via `useTuiStore.getState()`" pattern is kept anyway for `BrowseKeymap`/`FilterInput`/`NewGroupInput`/`MoveTarget` — it's still the right shape for keymaps that must vanish when their mode isn't active.
+- Ctrl+C already exits via Ink's default `exitOnCtrlC` (set in `render()`, in `run.ts`) — don't add per-component Ctrl+C handlers.
+- `useWindowSize()` from `ink` is resize-aware out of the box; there's no need for a custom terminal-size hook.
 - Keymaps are mode-scoped by mounting: `BrowseKeymap` etc. only exist while their mode is active, so single-letter bindings don't capture form typing. Keep that pattern when adding modes.
+- `react-devtools-core` is a real (if inert) `dependency`, not a mistake: Ink's `reconciler.js` does `await import('./devtools.js')` behind a `DEV==='true'` runtime check, but Bun's bundler still statically resolves that dynamic import's whole graph — for `bun build --compile` specifically, an unresolvable module there is a hard build failure (and marking it `--external` breaks the compiled binary at runtime instead, since standalone binaries can't do real `require()` lookups). Installing the package is the only fix that works for both `bun run` and the compiled binary; it's never actually loaded unless `DEV=true` is set.
 
 ## Conventions
 
