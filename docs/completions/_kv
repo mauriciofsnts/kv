@@ -52,7 +52,7 @@ _kv() {
         'list:List groups and names'
         'rm:Remove a secret'
         'alias:Manage alternative names'
-        'share:Share a group as an encrypted QR code'
+        'share:Share a group as an encrypted payload'
         'import:Import a shared group'
         'lock:End the session'
         'passwd:Change the vault password'

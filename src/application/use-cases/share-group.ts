@@ -1,6 +1,6 @@
-// Sharing a group of secrets out-of-band (QR code, chat, ...): the payload
+// Sharing a group of secrets out-of-band (chat, file, ...): the payload
 // is the group's secrets gzipped and encrypted with a one-time share code.
-// Whoever gets the payload learns nothing without the code, so the QR/text
+// Whoever gets the payload learns nothing without the code, so the payload
 // and the code should travel through different channels.
 //
 // Payload format v1 (also the wire contract for `kv import`):

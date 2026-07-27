@@ -37,7 +37,7 @@ function help(u: Ui): string {
     row('kv alias add NAME A...', 'Add aliases (alternative names, same value)'),
     row('kv alias rm NAME A...', 'Remove aliases'),
     row('kv alias move NAME DEST', 'Turn NAME (and its aliases) into aliases of DEST'),
-    row('kv share [GROUP]', 'Share a group as an encrypted QR code + one-time code'),
+    row('kv share [GROUP]', 'Share a group as an encrypted payload + one-time code'),
     row('kv import [PAYLOAD]', 'Import a shared group (asks for the one-time code)'),
     row('kv lock', 'End the session (ask for the password again)'),
     row('kv passwd', 'Change the vault password'),
