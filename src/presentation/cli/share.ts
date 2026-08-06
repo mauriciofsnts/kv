@@ -1,11 +1,7 @@
-import QRCode from 'qrcode'
 import { shareGroup } from '../../composition.ts'
 import { confirmPrompt, hiddenPrompt, readLine } from './prompt.ts'
 import { ui, uiErr } from './ui.ts'
 import { resolveGroup, unlockVault } from './unlock.ts'
-
-// Beyond this the QR gets too dense to scan reliably off a terminal.
-const MAX_QR_PAYLOAD = 1200
 
 export async function cmdShare(groupArg: string | undefined, groupFlag?: string): Promise<void> {
   const vault = await unlockVault()
@@ -23,31 +19,13 @@ export async function cmdShare(groupArg: string | undefined, groupFlag?: string)
     `Sharing group "${ui.bold(ui.cyan(group))}" — ${names.length} secret${names.length === 1 ? '' : 's'}: ${names.join(', ')}`,
   )
   console.log()
-
-  if (payload.length > MAX_QR_PAYLOAD) {
-    console.log(ui.dim(`(payload too large for a scannable QR — ${payload.length} chars; copy the text below instead)`))
-  } else {
-    const qr = await QRCode.toString(payload, {
-      type: 'terminal',
-      small: true,
-      errorCorrectionLevel: 'L',
-    })
-    const qrWidth = qr.split('\n')[0]?.length ?? 0
-    const termWidth = process.stdout.columns || 80
-    if (qrWidth > termWidth) {
-      console.log(ui.dim(`(QR needs ${qrWidth} columns but the terminal has ${termWidth} — widen it and run again, or copy the text below)`))
-    } else {
-      console.log(qr)
-    }
-  }
-
-  console.log(ui.dim('Payload (same content as the QR):'))
+  console.log(ui.dim('Payload:'))
   console.log(payload)
   console.log()
   console.log(`One-time code:  ${ui.bold(ui.yellow(code))}`)
   console.log()
   console.log(ui.dim('On the other machine: `kv import`, paste the payload, then type the code.'))
-  console.log(ui.dim('Send the code through a different channel than the QR/payload.'))
+  console.log(ui.dim('Send the code through a different channel than the payload.'))
 }
 
 export async function cmdImport(payloadArg: string | undefined, groupFlag?: string): Promise<void> {
