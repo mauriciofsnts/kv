@@ -4,6 +4,7 @@ import { VaultExistsError, VaultNotFoundError, WrongPasswordError } from './doma
 import { vaultAccess } from './composition.ts'
 import { cmdApply } from './presentation/cli/apply.ts'
 import { cmdDiff } from './presentation/cli/diffcmd.ts'
+import { cmdUse } from './presentation/cli/groupcmd.ts'
 import { cmdInit } from './presentation/cli/init.ts'
 import { cmdRun } from './presentation/cli/run.ts'
 import { cmdScan } from './presentation/cli/scan.ts'
@@ -32,6 +33,8 @@ function help(u: Ui): string {
     row('kv set NAME', 'Store a secret (value via hidden prompt)'),
     row('kv get NAME [--copy]', "Print a secret's value (or copy it, auto-clears)"),
     row('kv list', 'List groups and names (never values)'),
+    row('kv use [GROUP]', 'Show, or pin, the active group for this directory'),
+    cont('(writes a .kv marker; no GROUP shows the current one)'),
     row('kv rm NAME', 'Remove a secret'),
     row('kv alias NAME', "List a secret's aliases"),
     row('kv alias add NAME A...', 'Add aliases (alternative names, same value)'),
@@ -50,6 +53,7 @@ function help(u: Ui): string {
     '',
     head('Options:'),
     row('--group, -g <group>', 'Vault group (default: .kv file in the directory, else "default")'),
+    cont('set the .kv file for a directory with `kv use GROUP`'),
     row('--env, -e <file>', 'Target file for apply/scan/diff (default: ./.env)'),
     row('--from <file>', 'Template file for `kv apply all --from`'),
     row('--force, -f', 'kv apply: overwrite variables that already have a'),
@@ -136,6 +140,9 @@ async function main(): Promise<void> {
       break
     case 'list':
       await cmdList(values.group)
+      break
+    case 'use':
+      await cmdUse(arg)
       break
     case 'rm':
       await cmdRm(arg, values.group)

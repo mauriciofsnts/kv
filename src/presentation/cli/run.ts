@@ -1,6 +1,6 @@
 import { groupEnvMap } from '../../domain/secret.ts'
 import { uiErr } from './ui.ts'
-import { resolveGroup, unlockVault } from './unlock.ts'
+import { requireGroup, resolveGroup, unlockVault } from './unlock.ts'
 
 // kv run [-g group] -- <command...>: run a command with the group's
 // secrets (canonical names + aliases) injected as environment variables.
@@ -12,10 +12,7 @@ export async function cmdRun(command: string[], groupFlag?: string): Promise<voi
   }
   const vault = await unlockVault()
   const group = resolveGroup(groupFlag)
-  if (!(group in vault.data.groups)) {
-    console.error(uiErr.bad(`Group "${group}" does not exist in the vault.`))
-    process.exit(1)
-  }
+  requireGroup(vault, group, groupFlag)
 
   const env = groupEnvMap(vault.data, group)
   const count = Object.keys(env).length

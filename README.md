@@ -54,6 +54,8 @@ kv diff                        # drift between ./.env and the vault (names only)
 kv get POSTGRES_DB             # print the value (pipe-friendly)
 kv get POSTGRES_DB --copy      # copy to clipboard, auto-clears in 30s
 kv list                        # list groups and names (never values)
+kv use                         # show the active group for this directory
+kv use backend                 # pin it here (writes ./.kv), offers to create the group
 kv rm POSTGRES_DB              # remove with confirmation
 kv alias add DATABASE_URL DB_URL POSTGRES_URL   # alternative names, same value
 kv alias rm DATABASE_URL POSTGRES_URL           # remove aliases
@@ -127,8 +129,12 @@ Secrets live in groups inside the vault (`default` if unspecified). Group resolu
 3. `default`
 
 ```bash
-echo "my-project" > .kv   # every `kv apply` in this directory uses the my-project group
+kv use my-project   # writes ./.kv; every `kv apply`/`set`/`get`/`run` here now targets my-project
+                     # (group doesn't exist yet? kv use offers to create it)
+kv use               # show which group is active here, and where it's pinned from
 ```
+
+`kv use` is the fast path for switching between projects: `cd` into a directory, `kv use its-group` once, and every command run there afterwards is already scoped to it — no `--group` on each invocation. (You can still write the marker by hand — `echo "my-project" > .kv` — `kv use` just saves the round trip and validates the group.)
 
 ### Daily workflow
 

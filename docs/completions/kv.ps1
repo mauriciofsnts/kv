@@ -1,7 +1,7 @@
 Register-ArgumentCompleter -Native -CommandName kv -ScriptBlock {
     param($wordToComplete, $commandAst, $cursorPosition)
 
-    $commands = 'init', 'apply', 'run', 'scan', 'diff', 'set', 'get', 'list', 'rm', 'alias', 'config', 'vault', 'share', 'import', 'lock', 'passwd', 'help'
+    $commands = 'init', 'apply', 'run', 'scan', 'diff', 'set', 'get', 'list', 'use', 'rm', 'alias', 'config', 'vault', 'share', 'import', 'lock', 'passwd', 'help'
 
     $tokens = $commandAst.CommandElements | Select-Object -Skip 1 | ForEach-Object { $_.ToString() }
 
@@ -38,7 +38,7 @@ Register-ArgumentCompleter -Native -CommandName kv -ScriptBlock {
         $null { $commands }
         'apply' { @('all') + (Get-KvCandidates 'names') }
         { $_ -in 'get', 'rm', 'set', 'alias' } { Get-KvCandidates 'names' }
-        { $_ -in 'share', 'import' } { Get-KvCandidates 'groups' }
+        { $_ -in 'share', 'import', 'use' } { Get-KvCandidates 'groups' }
         default { @() }
     }
 

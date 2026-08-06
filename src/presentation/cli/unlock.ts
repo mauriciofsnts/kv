@@ -46,11 +46,13 @@ export async function unlockVault(): Promise<Vault> {
   throw new WrongPasswordError()
 }
 
+const MARKER_FILES = ['.kv', '.key']
+
 // Group resolution: --group > .kv file in the current directory (.key still
 // honored from when the tool was named `key`) > "default".
 export function resolveGroup(flag: string | undefined, cwd = process.cwd()): string {
   if (flag) return flag
-  for (const file of ['.kv', '.key']) {
+  for (const file of MARKER_FILES) {
     const marker = join(cwd, file)
     if (existsSync(marker)) {
       const name = readFileSync(marker, 'utf8').trim()
@@ -58,4 +60,32 @@ export function resolveGroup(flag: string | undefined, cwd = process.cwd()): str
     }
   }
   return DEFAULT_GROUP
+}
+
+// Path of the group marker for `kv use`: the existing .kv/.key file if the
+// directory already has one (so re-pinning doesn't leave a second, stale
+// marker behind), else a new .kv file.
+export function groupMarkerPath(cwd = process.cwd()): string {
+  for (const file of MARKER_FILES) {
+    const marker = join(cwd, file)
+    if (existsSync(marker)) return marker
+  }
+  return join(cwd, '.kv')
+}
+
+// `resolveGroup` never fails: an unknown group is only caught once a command
+// actually looks it up in the vault. When that happens, callers use this to
+// check and report — and, since "default" always exists, an unresolvable
+// group with no --group flag can only mean a stale/mistyped .kv marker, so
+// the message points at it and at the fix (`kv use`) instead of just "no
+// such group".
+export function requireGroup(vault: Vault, group: string, flag: string | undefined): void {
+  if (group in vault.data.groups) return
+  let hint = ''
+  if (!flag) {
+    const marker = groupMarkerPath()
+    if (existsSync(marker)) hint = ` ${uiErr.dim(`(pinned in ${marker} — fix with \`kv use <group>\`)`)}`
+  }
+  console.error(uiErr.bad(`Group "${group}" does not exist in the vault.`) + hint)
+  process.exit(1)
 }

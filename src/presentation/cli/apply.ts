@@ -3,7 +3,7 @@ import { applyEnv, config } from '../../composition.ts'
 import { listSecrets } from '../../domain/secret.ts'
 import { confirmPrompt } from './prompt.ts'
 import { ui, uiErr } from './ui.ts'
-import { resolveGroup, unlockVault } from './unlock.ts'
+import { requireGroup, resolveGroup, unlockVault } from './unlock.ts'
 
 interface ApplyOptions {
   group?: string
@@ -49,10 +49,7 @@ export async function cmdApply(target: string | undefined, options: ApplyOptions
     }
     const vault = await unlockVault()
     const group = resolveGroup(options.group)
-    if (!(group in vault.data.groups)) {
-      console.error(uiErr.bad(`Group "${group}" does not exist in the vault.`))
-      process.exit(1)
-    }
+    requireGroup(vault, group, options.group)
     const result = applyEnv.applyTemplate(vault, group, options.from, envFile, force)
     console.log(`${summarize(result)} → wrote ${ui.bold(envFile)} from ${options.from}${ui.group(group)}`)
     return
@@ -65,10 +62,7 @@ export async function cmdApply(target: string | undefined, options: ApplyOptions
 
   const vault = await unlockVault()
   const group = resolveGroup(options.group)
-  if (!(group in vault.data.groups)) {
-    console.error(uiErr.bad(`Group "${group}" does not exist in the vault.`))
-    process.exit(1)
-  }
+  requireGroup(vault, group, options.group)
 
   if (target === 'all') {
     const result = applyEnv.applyAll(vault, group, envFile, force)

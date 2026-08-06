@@ -50,6 +50,7 @@ _kv() {
         'set:Store a secret'
         'get:Print a secret value'
         'list:List groups and names'
+        'use:Show or pin the active group for this directory'
         'rm:Remove a secret'
         'alias:Manage alternative names'
         'share:Share a group as an encrypted QR code'
@@ -92,6 +93,9 @@ _kv() {
           ;;
         share|import)
           _arguments $group_opt '1:group:_kv_groups'
+          ;;
+        use)
+          _arguments '1:group:_kv_groups'
           ;;
         config)
           _arguments '1:setting:(force)' '2:value:(on off)'

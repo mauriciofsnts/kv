@@ -5,7 +5,7 @@ _kv_completions() {
   words=("${COMP_WORDS[@]}")
   cword=$COMP_CWORD
 
-  local commands="init apply run scan diff set get list rm alias config vault share import lock passwd help"
+  local commands="init apply run scan diff set get list use rm alias config vault share import lock passwd help"
 
   case $prev in
     -g | --group)
@@ -51,7 +51,7 @@ _kv_completions() {
     get | rm | set | alias)
       COMPREPLY=($(compgen -W "$(command kv __complete names "${fwd[@]}" 2>/dev/null)" -- "$cur"))
       ;;
-    share | import)
+    share | import | use)
       COMPREPLY=($(compgen -W "$(command kv __complete groups 2>/dev/null)" -- "$cur"))
       ;;
   esac

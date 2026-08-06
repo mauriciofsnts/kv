@@ -1,6 +1,6 @@
 import { applyEnv } from '../../composition.ts'
 import { ui, uiErr } from './ui.ts'
-import { resolveGroup, unlockVault } from './unlock.ts'
+import { requireGroup, resolveGroup, unlockVault } from './unlock.ts'
 
 // kv diff [--env file] [-g group]: drift report between the .env and the
 // vault. Names and statuses only, never values. Exits 1 when values differ,
@@ -14,10 +14,7 @@ export async function cmdDiff(groupFlag?: string, envFlag?: string): Promise<voi
 
   const vault = await unlockVault()
   const group = resolveGroup(groupFlag)
-  if (!(group in vault.data.groups)) {
-    console.error(uiErr.bad(`Group "${group}" does not exist in the vault.`))
-    process.exit(1)
-  }
+  requireGroup(vault, group, groupFlag)
 
   const diff = applyEnv.diff(vault, group, envFile)
   if (diff.inSync.length > 0) {
