@@ -184,6 +184,13 @@ main().catch((err) => {
     console.error(uiErr.bad(err.message))
   } else if (err instanceof Error && err.message === 'canceled') {
     console.error(uiErr.dim('Canceled.'))
+  } else if (
+    err instanceof TypeError &&
+    typeof (err as NodeJS.ErrnoException).code === 'string' &&
+    (err as NodeJS.ErrnoException).code!.startsWith('ERR_PARSE_ARGS')
+  ) {
+    console.error(uiErr.bad(err.message))
+    console.error(uiErr.dim("Run 'kv help' to see available commands and options."))
   } else {
     console.error(err)
   }
