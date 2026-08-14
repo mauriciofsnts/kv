@@ -24,6 +24,12 @@ export async function runTui(): Promise<void> {
   const { render } = await import('ink')
   const { createElement } = await import('react')
   const { App } = await import('./App.tsx')
-  const instance = render(createElement(App))
+  // `alternateScreen` draws the TUI in the terminal's alternate screen
+  // buffer (the same mechanism vim/htop/less use) so its redraws never
+  // touch the user's real scrollback. Ink restores the primary buffer on
+  // every exit path itself — normal unmount, the scattered `process.exit()`
+  // calls in components, Ctrl+C, uncaught errors — via its own `signal-exit`
+  // hook, so no manual escape-code handling is needed here.
+  const instance = render(createElement(App), { alternateScreen: true })
   await instance.waitUntilExit()
 }
